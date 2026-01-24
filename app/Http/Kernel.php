@@ -39,7 +39,7 @@ class Kernel extends HttpKernel
     protected $middlewareAliases = [
     'auth' => \App\Http\Middleware\Authenticate::class,
 
-    'identify.tenant' => \App\Http\Middleware\IdentifyTenant::class,
+    'identify.tenant.path' => \App\Http\Middleware\IdentifyTenantFromPath::class,
     'tenant' => \App\Http\Middleware\TenantMiddleware::class,
     'no.tenant' => \App\Http\Middleware\EnsureUserHasNoTenant::class,
 
@@ -47,5 +47,4 @@ class Kernel extends HttpKernel
     'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
     'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
 ];
-
 }

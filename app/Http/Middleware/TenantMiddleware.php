@@ -2,19 +2,46 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\URL;
 
-class TenantMiddleware
+class IdentifyTenantFromPath
 {
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next)
     {
-        if (!app()->has('tenant') && !app()->has('currentTenant')) {
-            abort(404, 'Tenant context missing.');
+        $tenantParam = $request->route('tenant');
+
+        $tenant = $tenantParam instanceof Tenant
+            ? $tenantParam
+            : Tenant::where('subdomain', $tenantParam)->first();
+
+        if (!$tenant) {
+            abort(404, 'Tenant not found');
+        }
+
+        app()->instance('tenant', $tenant);
+        app()->instance('currentTenant', $tenant);
+
+        // ✅ auto-fill /t/{tenant}/... when using route('tenant.*')
+        URL::defaults(['tenant' => $tenant->subdomain]);
+
+        $user = $request->user();
+
+        // ✅ allow super admin to access any tenant
+        if ($user && method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+            return $next($request);
+        }
+
+        // regular tenant users must match tenant in path
+        if ($user && (int) $user->tenant_id !== (int) $tenant->id) {
+            abort(403, 'You do not belong to this tenant.');
         }
 
         return $next($request);
     }
 }
+
+
 

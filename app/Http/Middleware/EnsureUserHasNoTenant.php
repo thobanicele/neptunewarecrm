@@ -10,8 +10,9 @@ class EnsureUserHasNoTenant
     public function handle(Request $request, Closure $next)
     {
         if ($request->user()?->tenant_id) {
-            return redirect()->route('tenant.dashboard')
+            return redirect()->route('app.home')
                 ->with('error', 'You already belong to a tenant.');
+
         }
 
         return $next($request);

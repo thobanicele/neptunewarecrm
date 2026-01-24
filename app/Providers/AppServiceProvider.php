@@ -4,15 +4,26 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\Cache;
+use App\Models\Activity;
+use App\Support\TenantPlan;
 
 class AppServiceProvider extends ServiceProvider
-{
+{   
+
+    protected $policies = [
+        \App\Models\Deal::class => \App\Policies\DealPolicy::class,
+    ];
+
     /**
      * Register any application services.
      */
     public function register(): void
     {
-        //
+        
     }
 
     /**
@@ -20,6 +31,26 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Blade::if('feature', fn(string $f) => TenantPlan::currentFeature($f));
         Schema::defaultStringLength(191);
+        View::composer('layouts.backend.part.sidebar', function ($view) {
+        $tenant = app('tenant');
+
+        $count = 0;
+
+        if ($tenant) {
+            // Optional: cache for 30s to avoid a query on every page load
+            $count = Cache::remember("tenant:{$tenant->id}:overdue_followups", 30, function () use ($tenant) {
+                return Activity::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->whereNull('done_at')
+                    ->whereNotNull('due_at')
+                    ->where('due_at', '<', now())
+                    ->count();
+                });
+            }
+
+        $view->with('overdueFollowupsCount', $count);
+        });
     }
 }

@@ -15,10 +15,8 @@ class CreateTenantRequest extends FormRequest
     public function rules(): array
     {
         $reserved = [
-            'www','admin','app','api','mail','ftp','localhost','support',
-            'billing','account','accounts','cdn','static',
-            // your platform/reserved subdomains:
-            'crm','tenant','super'
+            't','login','logout','register','admin','api','www','mail','support','billing','account',
+            'assets','css','js','images','storage'
         ];
 
         return [
@@ -37,20 +35,12 @@ class CreateTenantRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'subdomain.regex' => 'Subdomain may contain letters, numbers, and hyphens (cannot start/end with a hyphen).',
-            'subdomain.unique' => 'That subdomain is already taken. Try another one.',
-            'subdomain.not_in' => 'That subdomain is reserved. Choose another one.',
+            'subdomain.regex' => 'Tenant key may contain letters, numbers, and hyphens (cannot start/end with a hyphen).',
+            'subdomain.not_in' => 'That tenant key is reserved. Choose another one.',
+            'subdomain.unique' => 'That tenant key is already taken.',
         ];
     }
-
-    protected function prepareForValidation(): void
-    {
-        if ($this->has('subdomain')) {
-            $this->merge([
-                'subdomain' => strtolower(trim($this->input('subdomain'))),
-            ]);
-        }
-    }
 }
+
 
 

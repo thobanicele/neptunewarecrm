@@ -10,7 +10,7 @@ class TenantAdminController extends Controller
     {
         $tenant = app('currentTenant');
         $users = $tenant->users()->get();
-        return view('tenant.dashboard', compact('tenant','users'));
+        return view('tenant.dashboard.index', compact('tenant','users'));
     }
 
 }

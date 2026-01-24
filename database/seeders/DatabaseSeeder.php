@@ -7,6 +7,8 @@ use App\Models\Tenant;
 use App\Models\Subscription;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use CommerceGuys\Addressing\Country\CountryRepository;
+use CommerceGuys\Addressing\Subdivision\SubdivisionRepository;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,6 +17,8 @@ class DatabaseSeeder extends Seeder
         // 1) Seed roles first (very important)
         $this->call([
             RoleSeeder::class,
+            CountriesSeeder::class,
+            SouthAfricaProvincesSeeder::class,
             // PermissionSeeder::class, // if you have one
         ]);
 
@@ -75,6 +79,60 @@ class DatabaseSeeder extends Seeder
             'tenant_id' => $tenant2->id,
         ]);
         $t2Admin->assignRole('tenant_admin');
+
+        $countryRepo = new CountryRepository();
+        $subRepo = new SubdivisionRepository();
+
+        DB::transaction(function () use ($countryRepo, $subRepo) {
+            // 1) Countries
+            $countries = $countryRepo->getAll(); // country objects :contentReference[oaicite:4]{index=4}
+            foreach ($countries as $c) {
+                DB::table('countries')->updateOrInsert(
+                    ['iso2' => $c->getCountryCode()],
+                    [
+                        'name' => $c->getName(),
+                        'iso3' => $c->getThreeLetterCode(),
+                        'numeric_code' => $c->getNumericCode(),
+                        'currency_code' => $c->getCurrencyCode(),
+                        'updated_at' => now(),
+                        'created_at' => now(),
+                    ]
+                );
+            }
+
+            // 2) Subdivisions (only for countries where the library has them)
+            // Because subdivisions exist for ~60 countries, we try/catch per country. :contentReference[oaicite:5]{index=5}
+            foreach ($countries as $c) {
+                $cc = $c->getCountryCode();
+
+                try {
+                    $level1 = $subRepo->getAll([$cc]); // first-level admin areas :contentReference[oaicite:6]{index=6}
+                } catch (\Throwable $e) {
+                    continue; // no subdivision dataset for this country
+                }
+
+                foreach ($level1 as $sub) {
+                    $subCode = $sub->getCode();      // e.g. 'GP' or 'ZA-GP' depending on dataset
+                    $isoCode = method_exists($sub, 'getIsoCode') ? $sub->getIsoCode() : null; // admin areas
+                    $name = $sub->getName();
+
+                    DB::table('country_subdivisions')->updateOrInsert(
+                        [
+                            'country_iso2' => $cc,
+                            'code' => $subCode,
+                            'level' => 1,
+                        ],
+                        [
+                            'iso_code' => $isoCode,
+                            'name' => $name,
+                            'parent_code' => null,
+                            'updated_at' => now(),
+                            'created_at' => now(),
+                        ]
+                    );
+                }
+            }
+        });
     }
 }
 
