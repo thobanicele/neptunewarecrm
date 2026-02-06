@@ -56,6 +56,21 @@
             </a>
         </li>
         <li class="sidebar-item">
+            <a class="sidebar-link" href="{{ tenant_route('tenant.invoices.index') }}">
+                <i class="align-middle" data-feather="file-text"></i> <span class="align-middle">Invoices</span>
+            </a>
+        </li>
+        <li class="sidebar-item">
+            <a class="sidebar-link" href="#">
+                <i class="align-middle" data-feather="file-text"></i> <span class="align-middle">Credit Notes</span>
+            </a>
+        </li>
+        <li class="sidebar-item">
+            <a class="sidebar-link" href="#">
+                <i class="align-middle" data-feather="dollar-sign"></i> <span class="align-middle">Payments</span>
+            </a>
+        </li>
+        <li class="sidebar-item">
             <a class="sidebar-link" href="{{ tenant_route('tenant.activities.followups') }}">
                 <i class="align-middle" data-feather="list"></i> <span class="align-middle">Activities</span>
                 @if (($overdueFollowupsCount ?? 0) > 0)

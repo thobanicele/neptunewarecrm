@@ -1,12 +1,14 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use App\Models\Country;
+use App\Models\Tenant;
 use Illuminate\Http\Request;
 
 class GeoController extends Controller
 {
-    public function subdivisions(string $countryIso2)
+    public function subdivisions(Tenant $tenant, string $countryIso2)
     {
         $country = Country::where('iso2', strtoupper($countryIso2))->firstOrFail();
 

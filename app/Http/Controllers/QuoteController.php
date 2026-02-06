@@ -3,18 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Quote;
+use App\Models\Invoice;
 use App\Models\QuoteSequence;
 use App\Models\Deal;
 use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
 use App\Models\Product;
+use App\Models\TaxType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class QuoteController extends Controller
 {
-    public function index(Request $request)
+    public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
 
@@ -24,16 +27,16 @@ class QuoteController extends Controller
 
         $items = Quote::query()
             ->where('tenant_id', $tenant->id)
-            ->with(['deal','company','contact','salesPerson','owner'])
+            ->with(['deal', 'company', 'contact', 'salesPerson', 'owner'])
             ->when($status, fn ($qry) => $qry->where('status', $status))
             ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
             ->when($q, function ($qry) use ($q) {
                 $qry->where(function ($x) use ($q) {
                     $x->where('quote_number', 'like', "%{$q}%")
-                      ->orWhere('notes', 'like', "%{$q}%")
-                      ->orWhereHas('deal', fn ($d) => $d->where('title', 'like', "%{$q}%"))
-                      ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
-                      ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                        ->orWhere('notes', 'like', "%{$q}%")
+                        ->orWhereHas('deal', fn ($d) => $d->where('title', 'like', "%{$q}%"))
+                        ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
+                        ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
                 });
             })
             ->orderByDesc('updated_at')
@@ -43,171 +46,223 @@ class QuoteController extends Controller
         $salesPeople = User::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
-            ->get(['id','name']);
+            ->get(['id', 'name']);
 
         return view('tenant.quotes.index', compact(
-            'tenant','items','salesPeople','q','status','sales_person_user_id'
+            'tenant',
+            'items',
+            'salesPeople',
+            'q',
+            'status',
+            'sales_person_user_id'
         ));
     }
 
-    public function create(Request $request)
+    public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
 
-        $deal = null;
-        $dealId = $request->query('deal_id');
+        // ✅ Prefill from query string
+        $prefillCompanyId = $request->integer('company_id') ?: null;
+        $prefillContactId = $request->integer('contact_id') ?: null;
 
-        if ($dealId) {
-            $deal = Deal::query()
+        // ✅ Validate prefilled company belongs to this tenant
+        if ($prefillCompanyId) {
+            $ok = Company::query()
                 ->where('tenant_id', $tenant->id)
-                ->with(['company', 'primaryContact'])
-                ->findOrFail($dealId);
+                ->where('id', $prefillCompanyId)
+                ->exists();
+
+            if (!$ok) {
+                $prefillCompanyId = null;
+                $prefillContactId = null;
+            }
         }
 
+        // ✅ Validate prefilled contact belongs to tenant (+ optionally company if column exists)
+        if ($prefillContactId) {
+            $ok = Contact::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('id', $prefillContactId)
+                ->when(
+                    $prefillCompanyId && $this->schema_has_column('contacts', 'company_id'),
+                    fn ($q) => $q->where('company_id', $prefillCompanyId)
+                )
+                ->exists();
+
+            if (!$ok) {
+                $prefillContactId = null;
+            }
+        }
+
+        // ✅ If company is prefilled but contact is not, auto-pick first contact for that company (if possible)
+        if ($prefillCompanyId && !$prefillContactId && $this->schema_has_column('contacts', 'company_id')) {
+            $prefillContactId = Contact::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('company_id', $prefillCompanyId)
+                ->orderBy('name')
+                ->value('id');
+        }
+        $products = Product::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name','sku','description','unit_rate']); // or your actual columns
+
+        $taxTypes = TaxType::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name','rate']);
+
+        $defaultTaxTypeId = $taxTypes->first()?->id;
+
+        $deals = Deal::query()
+            ->where('tenant_id', $tenant->id)
+            ->latest()
+            ->get(['id','title']);
+
+
+        // --- Companies (+ address snapshots for the create screen) ---
+        $companies = Company::query()
+            ->where('tenant_id', $tenant->id)
+            ->with(['addresses.country', 'addresses.subdivision'])
+            ->orderBy('name')
+            ->get();
+
+        $companiesJson = $companies->map(function ($c) {
+            $billing = $c->addresses
+                ->where('type', 'billing')
+                ->sortByDesc('is_default_billing')
+                ->sortByDesc('id')
+                ->first();
+
+            $shipping = $c->addresses
+                ->where('type', 'shipping')
+                ->sortByDesc('is_default_shipping')
+                ->sortByDesc('id')
+                ->first();
+
+            return [
+                'id' => $c->id,
+                'name' => $c->name,
+                'payment_terms' => $c->payment_terms,
+                'vat_treatment' => $c->vat_treatment,
+                'vat_number' => $c->vat_number,
+                'billing_address' => $billing?->toSnapshotString(),
+                'shipping_address' => $shipping?->toSnapshotString(),
+                'address' => $billing?->toSnapshotString() ?: $shipping?->toSnapshotString(),
+            ];
+        })->keyBy('id');
+
+        // ✅ Sales people list (THIS is what your blade expects)
         $salesPeople = User::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $prefillSalesPersonId = $deal?->owner_user_id ?? auth()->id();
-
-        $companies = Company::query()
-            ->where('tenant_id', $tenant->id)
-            ->orderBy('name')
-            ->get([
-                'id',
-                'name',
-                'address',
-                'billing_address',
-                'shipping_address',
-                'vat_treatment',
-                'vat_number',
-                'payment_terms',      // ✅ NEW
-            ]);
-
+        // ✅ Contacts list (filtered if company is prefilled + contacts.company_id exists)
         $contacts = Contact::query()
             ->where('tenant_id', $tenant->id)
+            ->when(
+                $prefillCompanyId && $this->schema_has_column('contacts', 'company_id'),
+                fn ($q) => $q->where('company_id', $prefillCompanyId)
+            )
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $prefillCompanyId = $deal?->company_id;
-        $prefillContactId = $deal?->primary_contact_id; // ensure deals table has this
-
-        $deals = Deal::query()
-            ->where('tenant_id', $tenant->id)
-            ->orderByDesc('updated_at')
-            ->get(['id', 'title', 'company_id', 'primary_contact_id']); // ✅ include these
-
-        $products = Product::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id','sku','unit','name','description','unit_rate']);
-
-
-        $taxTypes = \App\Models\TaxType::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('is_active', true)
-            ->orderByDesc('is_default')
-            ->orderBy('name')
-            ->get(['id', 'name', 'rate', 'is_default']);
-
-        $defaultTaxTypeId = $taxTypes->firstWhere('is_default', true)?->id ?? $taxTypes->first()?->id;
+        // keep your existing $deals/$taxTypes/$defaultTaxTypeId/$products etc.
+        // ...
 
         return view('tenant.quotes.create', compact(
             'tenant',
-            'deal',
-            'deals',
             'companies',
+            'companiesJson',
             'contacts',
+            'salesPeople',          // ✅ PASS TO VIEW
             'prefillCompanyId',
             'prefillContactId',
-            'salesPeople',
-            'prefillSalesPersonId',
-            'products',
+            'deals',
             'taxTypes',
-            'defaultTaxTypeId'
+            'defaultTaxTypeId',
+            'products',
+            // ... include the rest you already had (deals, taxTypes, defaultTaxTypeId, products, etc.)
         ));
     }
 
 
-    public function store(Request $request)
+    /**
+     * Safe schema check (so you can run even if contacts.company_id doesn't exist yet)
+     */
+    private function schema_has_column(string $table, string $col): bool
+    {
+        try {
+            return \Illuminate\Support\Facades\Schema::hasColumn($table, $col);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+
+
+    public function store(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
 
         $data = $request->validate([
-            'deal_id'    => ['nullable','integer'],
-            'company_id' => ['nullable','integer'],
-            'contact_id' => ['nullable','integer'],
+            'deal_id'    => ['nullable', 'integer'],
+            'company_id' => ['nullable', 'integer'],
+            'contact_id' => ['nullable', 'integer'],
 
-            'issued_at'     => ['nullable','date'],
-            'valid_until'   => ['nullable','date'],
-            'notes'         => ['nullable','string'],
-            'terms'         => ['nullable','string'],
-            'status'        => ['nullable','in:draft,sent,accepted,declined,expired'],
+            'issued_at'     => ['nullable', 'date'],
+            'valid_until'   => ['nullable', 'date'],
+            'notes'         => ['nullable', 'string'],
+            'terms'         => ['nullable', 'string'],
+            'status'        => ['nullable', 'in:draft,sent,accepted,declined,expired'],
 
-            // ✅ NEW: customer reference (from frontend)
-            'customer_reference' => ['nullable','string','max:120'],
+            'customer_reference' => ['nullable', 'string', 'max:120'],
 
-            'sales_person_user_id' => ['required','integer'],
+            'sales_person_user_id' => ['required', 'integer'],
 
-            // header default (fallback)
-            'tax_type_id' => ['nullable','integer'],
+            'tax_type_id' => ['nullable', 'integer'],
 
-            'items' => ['required','array','min:1'],
-            'items.*.product_id'  => ['nullable','integer'],
-            'items.*.tax_type_id' => ['nullable','integer'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id'  => ['nullable', 'integer'],
+            'items.*.tax_type_id' => ['nullable', 'integer'],
+            'items.*.sku'  => ['nullable', 'string', 'max:64'],
+            'items.*.unit' => ['nullable', 'string', 'max:30'],
 
-            // snapshots (optional)
-            'items.*.sku'  => ['nullable','string','max:64'],
-            // you removed UNIT from UI - keep nullable so it doesn't break
-            'items.*.unit' => ['nullable','string','max:30'],
+            'items.*.name'        => ['required', 'string', 'max:190'],
+            'items.*.description' => ['nullable', 'string'],
+            'items.*.qty'         => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
 
-            'items.*.name'        => ['required','string','max:190'],
-            'items.*.description' => ['nullable','string'],
-            'items.*.qty'         => ['required','numeric','min:0.01'],
-            'items.*.unit_price'  => ['required','numeric','min:0'],
-
-            // ✅ NEW: per-line discount %
-            'items.*.discount_pct' => ['nullable','numeric','min:0','max:100'],
+            'items.*.discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         // Tenant safety (header fields)
-        if (!empty($data['deal_id'])) {
-            Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
-        }
-        if (!empty($data['company_id'])) {
-            Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
-        }
-        if (!empty($data['contact_id'])) {
-            Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
-        }
+        if (!empty($data['deal_id']))    Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
+        if (!empty($data['company_id'])) Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
+        if (!empty($data['contact_id'])) Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
         User::where('tenant_id', $tenant->id)->findOrFail((int) $data['sales_person_user_id']);
 
         return DB::transaction(function () use ($tenant, $data) {
 
-            // --------- Batch load Products ----------
+            // Products
             $productIds = collect($data['items'])
-                ->pluck('product_id')
-                ->filter()
-                ->unique()
-                ->map(fn ($id) => (int) $id)
-                ->values();
+                ->pluck('product_id')->filter()->unique()
+                ->map(fn ($id) => (int) $id)->values();
 
             $productsById = collect();
             if ($productIds->isNotEmpty()) {
                 $productsById = Product::query()
                     ->where('tenant_id', $tenant->id)
                     ->whereIn('id', $productIds)
-                    ->get(['id','sku','unit','name','description','unit_rate'])
+                    ->get(['id', 'sku', 'unit', 'name', 'description', 'unit_rate'])
                     ->keyBy('id');
 
-                if ($productsById->count() !== $productIds->count()) {
-                    abort(404);
-                }
+                if ($productsById->count() !== $productIds->count()) abort(404);
             }
 
-            // --------- Batch load Tax Types ----------
+            // Tax types
             $defaultTaxTypeId = !empty($data['tax_type_id']) ? (int) $data['tax_type_id'] : null;
 
             $taxTypeIds = collect($data['items'])
@@ -221,25 +276,22 @@ class QuoteController extends Controller
 
             $taxTypesById = collect();
             if ($taxTypeIds->isNotEmpty()) {
-                $taxTypesById = \App\Models\TaxType::query()
+                $taxTypesById = TaxType::query()
                     ->where('tenant_id', $tenant->id)
                     ->whereIn('id', $taxTypeIds)
-                    ->get(['id','name','rate'])
+                    ->get(['id', 'name', 'rate'])
                     ->keyBy('id');
 
-                if ($taxTypesById->count() !== $taxTypeIds->count()) {
-                    abort(404);
-                }
+                if ($taxTypesById->count() !== $taxTypeIds->count()) abort(404);
             }
 
             $quoteNumber = $this->nextQuoteNumber($tenant->id);
 
-            // Build snapshot items + compute totals server-side
             $snapshotItems = [];
 
-            $subtotalGross   = 0.0; // sum(qty*rate) BEFORE discount
-            $discountTotal   = 0.0; // sum(discount amounts)
-            $taxTotal        = 0.0; // VAT on NET (after discount)
+            $subtotalGross = 0.0; // BEFORE discount
+            $discountTotal = 0.0; // discount amounts
+            $taxTotal      = 0.0; // VAT on NET (after discount)
 
             foreach (array_values($data['items']) as $pos => $i) {
 
@@ -247,7 +299,6 @@ class QuoteController extends Controller
                 $productId = !empty($i['product_id']) ? (int) $i['product_id'] : null;
                 $taxTypeId = !empty($i['tax_type_id']) ? (int) $i['tax_type_id'] : $defaultTaxTypeId;
 
-                // defaults from post (snapshots)
                 $sku  = $i['sku'] ?? null;
                 $unit = $i['unit'] ?? null;
 
@@ -255,17 +306,15 @@ class QuoteController extends Controller
                 $desc      = $i['description'] ?? null;
                 $unitPrice = (float) $i['unit_price'];
 
-                // ✅ discount %
                 $discountPct = isset($i['discount_pct']) ? (float) $i['discount_pct'] : 0.0;
                 $discountPct = max(0.0, min(100.0, $discountPct));
 
-                // ✅ snapshot from product if selected
                 if ($productId) {
                     $p = $productsById->get($productId);
                     if (!$p) abort(404);
 
                     $sku  = $p->sku;
-                    $unit = $p->unit; // ok even if UI removed it
+                    $unit = $p->unit;
 
                     $name      = $p->name;
                     $desc      = $p->description;
@@ -279,7 +328,6 @@ class QuoteController extends Controller
                 $subtotalGross += $grossLine;
                 $discountTotal += $discAmt;
 
-                // tax snapshot
                 $taxName = null;
                 $taxRate = 0.0;
 
@@ -291,7 +339,6 @@ class QuoteController extends Controller
                     $taxRate = (float) $t->rate;
                 }
 
-                // ✅ VAT on NET amount
                 $lineTax = round($netLine * ($taxRate / 100), 2);
                 $taxTotal += $lineTax;
 
@@ -301,7 +348,6 @@ class QuoteController extends Controller
                     'tax_type_id' => $taxTypeId,
                     'position'    => $pos,
 
-                    // snapshots
                     'sku'         => $sku,
                     'unit'        => $unit,
 
@@ -310,14 +356,12 @@ class QuoteController extends Controller
                     'qty'         => $qty,
                     'unit_price'  => $unitPrice,
 
-                    // ✅ discount snapshot (requires DB cols on quote_items)
                     'discount_pct'    => $discountPct,
                     'discount_amount' => $discAmt,
 
-                    // store net line as line_total (excl VAT)
+                    // net (excl VAT)
                     'line_total'  => $netLine,
 
-                    // VAT snapshot
                     'tax_name'    => $taxName,
                     'tax_rate'    => $taxRate,
                     'tax_amount'  => $lineTax,
@@ -331,7 +375,6 @@ class QuoteController extends Controller
             $netSubtotal = round($subtotalGross - $discountTotal, 2);
             $total       = round($netSubtotal + $taxTotal, 2);
 
-            // effective VAT rate against net subtotal
             $effectiveRate = $netSubtotal > 0 ? round(($taxTotal / $netSubtotal) * 100, 2) : 0;
 
             $quote = Quote::create([
@@ -340,25 +383,19 @@ class QuoteController extends Controller
                 'company_id'=> $data['company_id'] ?? null,
                 'contact_id'=> $data['contact_id'] ?? null,
 
-                'owner_user_id'       => auth()->id(),
-                'sales_person_user_id'=> (int) $data['sales_person_user_id'],
+                'owner_user_id'        => auth()->id(),
+                'sales_person_user_id' => (int) $data['sales_person_user_id'],
 
                 'quote_number' => $quoteNumber,
                 'status'       => $data['status'] ?? 'draft',
                 'issued_at'    => $data['issued_at'] ?? now()->toDateString(),
                 'valid_until'  => $data['valid_until'] ?? null,
 
-                // ✅ NEW: customer reference
                 'customer_reference' => $data['customer_reference'] ?? null,
 
                 'tax_rate'   => $effectiveRate,
-
-                // Keep subtotal as GROSS (so you can show discount separately)
-                'subtotal'   => $subtotalGross,
-
-                // ✅ NEW: quote-level discount total (requires DB col on quotes)
-                'discount_amount' => $discountTotal,
-
+                'subtotal'   => $subtotalGross,      // gross subtotal
+                'discount_amount' => $discountTotal, // header discount total
                 'tax_amount' => $taxTotal,
                 'total'      => $total,
 
@@ -376,29 +413,44 @@ class QuoteController extends Controller
         });
     }
 
-
-
-
-    public function show(\App\Models\Tenant $tenant, Quote $quote)
+    public function show(string $tenantKey, Quote $quote)
     {
         $tenant = app('tenant');
-        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
+        abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         $quote->load([
-            'items' => function ($q) {
-                $q->orderBy('position');
-            },
-            'company',
+            'items',
+            'company.addresses.country',
+            'company.addresses.subdivision',
             'contact',
-            'deal',
             'salesPerson',
+            'owner',
         ]);
 
-        return view('tenant.quotes.show', compact('tenant', 'quote'));
+        $billing = $quote->company?->addresses
+            ?->where('type', 'billing')
+            ->sortByDesc('is_default_billing')
+            ->sortByDesc('id')
+            ->first();
+
+        $shipping = $quote->company?->addresses
+            ?->where('type', 'shipping')
+            ->sortByDesc('is_default_shipping')
+            ->sortByDesc('id')
+            ->first();
+
+        $billTo = $billing?->toSnapshotString()
+            ?: $shipping?->toSnapshotString()
+            ?: '';
+
+        $shipTo = $shipping?->toSnapshotString()
+            ?: $billing?->toSnapshotString()
+            ?: '';
+
+        return view('tenant.quotes.show', compact('tenant', 'quote', 'billTo', 'shipTo'));
     }
 
-
-    public function edit(\App\Models\Tenant $tenant, Quote $quote)
+    public function edit(string $tenantKey, Quote $quote)
     {
         $tenant = app('tenant');
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
@@ -419,17 +471,34 @@ class QuoteController extends Controller
 
         $companies = Company::query()
             ->where('tenant_id', $tenant->id)
+            ->with(['addresses.country', 'addresses.subdivision'])
             ->orderBy('name')
-            ->get([
-                'id',
-                'name',
-                'address',
-                'billing_address',
-                'shipping_address',
-                'vat_treatment',
-                'vat_number',
-                'payment_terms', // ✅ NEW
-            ]);
+            ->get();
+
+        $companiesJson = $companies->map(function ($c) {
+            $billing = $c->addresses
+                ->where('type', 'billing')
+                ->sortByDesc('is_default_billing')
+                ->sortByDesc('id')
+                ->first();
+
+            $shipping = $c->addresses
+                ->where('type', 'shipping')
+                ->sortByDesc('is_default_shipping')
+                ->sortByDesc('id')
+                ->first();
+
+            return [
+                'id' => $c->id,
+                'name' => $c->name,
+                'payment_terms' => $c->payment_terms,
+                'vat_treatment' => $c->vat_treatment,
+                'vat_number' => $c->vat_number,
+                'billing_address' => $billing?->toSnapshotString(),
+                'shipping_address' => $shipping?->toSnapshotString(),
+                'address' => $billing?->toSnapshotString() ?: $shipping?->toSnapshotString(),
+            ];
+        })->keyBy('id');
 
         $contacts = Contact::query()
             ->where('tenant_id', $tenant->id)
@@ -445,9 +514,9 @@ class QuoteController extends Controller
             ->where('tenant_id', $tenant->id)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'sku', 'name', 'description', 'unit_rate']);
+            ->get(['id', 'sku', 'unit', 'name', 'description', 'unit_rate']);
 
-        $taxTypes = \App\Models\TaxType::query()
+        $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
             ->where('is_active', true)
             ->orderByDesc('is_default')
@@ -461,6 +530,7 @@ class QuoteController extends Controller
             'quote',
             'deals',
             'companies',
+            'companiesJson',
             'contacts',
             'salesPeople',
             'products',
@@ -469,78 +539,65 @@ class QuoteController extends Controller
         ));
     }
 
-
-    public function update(Request $request, \App\Models\Tenant $tenant, Quote $quote)
+    public function update(string $tenantKey, Request $request, Quote $quote)
     {
         $tenant = app('tenant');
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         $data = $request->validate([
-            'deal_id' => ['nullable','integer'],
-            'company_id' => ['nullable','integer'],
-            'contact_id' => ['nullable','integer'],
+            'deal_id' => ['nullable', 'integer'],
+            'company_id' => ['nullable', 'integer'],
+            'contact_id' => ['nullable', 'integer'],
 
-            'issued_at' => ['nullable','date'],
-            'valid_until' => ['nullable','date'],
-            'notes' => ['nullable','string'],
-            'terms' => ['nullable','string'],
-            'status' => ['nullable','in:draft,sent,accepted,declined,expired'],
+            'issued_at' => ['nullable', 'date'],
+            'valid_until' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string'],
+            'terms' => ['nullable', 'string'],
+            'status' => ['nullable', 'in:draft,sent,accepted,declined,expired'],
 
-            'sales_person_user_id' => ['required','integer'],
+            'customer_reference' => ['nullable', 'string', 'max:120'],
 
-            // default VAT for new rows (header-level)
-            'tax_type_id' => ['nullable','integer'],
+            'sales_person_user_id' => ['required', 'integer'],
 
-            'items' => ['required','array','min:1'],
-            'items.*.product_id' => ['nullable','integer'],
-            'items.*.tax_type_id' => ['nullable','integer'],
+            'tax_type_id' => ['nullable', 'integer'],
 
-            // ✅ sku/unit snapshots (manual fallback)
-            'items.*.sku'  => ['nullable','string','max:64'],
-            'items.*.unit' => ['nullable','string','max:30'],
-
-            'items.*.name' => ['required','string','max:190'],
-            'items.*.description' => ['nullable','string'],
-            'items.*.qty' => ['required','numeric','min:0.01'],
-            'items.*.unit_price' => ['required','numeric','min:0'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['nullable', 'integer'],
+            'items.*.tax_type_id' => ['nullable', 'integer'],
+            'items.*.sku'  => ['nullable', 'string', 'max:64'],
+            'items.*.unit' => ['nullable', 'string', 'max:30'],
+            'items.*.name' => ['required', 'string', 'max:190'],
+            'items.*.description' => ['nullable', 'string'],
+            'items.*.qty' => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         // Tenant safety (header)
-        if (!empty($data['deal_id'])) {
-            Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
-        }
-        if (!empty($data['company_id'])) {
-            Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
-        }
-        if (!empty($data['contact_id'])) {
-            Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
-        }
+        if (!empty($data['deal_id']))    Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
+        if (!empty($data['company_id'])) Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
+        if (!empty($data['contact_id'])) Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
         User::where('tenant_id', $tenant->id)->findOrFail((int) $data['sales_person_user_id']);
 
         return DB::transaction(function () use ($tenant, $quote, $data) {
 
-            // --------- Batch load Products ----------
+            // Products
             $productIds = collect($data['items'])
-                ->pluck('product_id')
-                ->filter()
-                ->unique()
-                ->map(fn ($id) => (int) $id)
-                ->values();
+                ->pluck('product_id')->filter()->unique()
+                ->map(fn ($id) => (int) $id)->values();
 
             $productsById = collect();
             if ($productIds->isNotEmpty()) {
                 $productsById = Product::query()
                     ->where('tenant_id', $tenant->id)
                     ->whereIn('id', $productIds)
-                    ->get(['id','sku','unit','name','description','unit_rate']) // ✅ include sku/unit
+                    ->get(['id', 'sku', 'unit', 'name', 'description', 'unit_rate'])
                     ->keyBy('id');
 
-                if ($productsById->count() !== $productIds->count()) {
-                    abort(404);
-                }
+                if ($productsById->count() !== $productIds->count()) abort(404);
             }
 
-            // --------- Batch load Tax Types ----------
+            // Tax types
             $defaultTaxTypeId = !empty($data['tax_type_id']) ? (int) $data['tax_type_id'] : null;
 
             $taxTypeIds = collect($data['items'])
@@ -554,54 +611,56 @@ class QuoteController extends Controller
 
             $taxTypesById = collect();
             if ($taxTypeIds->isNotEmpty()) {
-                $taxTypesById = \App\Models\TaxType::query()
+                $taxTypesById = TaxType::query()
                     ->where('tenant_id', $tenant->id)
                     ->whereIn('id', $taxTypeIds)
-                    ->get(['id','name','rate'])
+                    ->get(['id', 'name', 'rate'])
                     ->keyBy('id');
 
-                if ($taxTypesById->count() !== $taxTypeIds->count()) {
-                    abort(404);
-                }
+                if ($taxTypesById->count() !== $taxTypeIds->count()) abort(404);
             }
 
-            // Build snapshot items + totals
             $snapshotItems = [];
-            $subtotal = 0.0;
-            $taxTotal = 0.0;
+
+            $subtotalGross = 0.0;
+            $discountTotal = 0.0;
+            $taxTotal      = 0.0;
 
             foreach (array_values($data['items']) as $pos => $i) {
 
-                $qty = (float) $i['qty'];
-
+                $qty       = (float) $i['qty'];
                 $productId = !empty($i['product_id']) ? (int) $i['product_id'] : null;
                 $taxTypeId = !empty($i['tax_type_id']) ? (int) $i['tax_type_id'] : $defaultTaxTypeId;
 
-                // ✅ manual fallback
                 $sku  = $i['sku'] ?? null;
                 $unit = $i['unit'] ?? null;
 
-                // defaults from post
-                $name = $i['name'];
-                $desc = $i['description'] ?? null;
+                $name      = $i['name'];
+                $desc      = $i['description'] ?? null;
                 $unitPrice = (float) $i['unit_price'];
 
-                // ✅ snapshot from product if selected
+                $discountPct = isset($i['discount_pct']) ? (float) $i['discount_pct'] : 0.0;
+                $discountPct = max(0.0, min(100.0, $discountPct));
+
                 if ($productId) {
                     $p = $productsById->get($productId);
                     if (!$p) abort(404);
 
-                    $sku  = $p->sku;         // ✅ snapshot sku
-                    $unit = $p->unit;        // ✅ snapshot unit
-                    $name = $p->name;
-                    $desc = $p->description;
+                    $sku  = $p->sku;
+                    $unit = $p->unit;
+
+                    $name      = $p->name;
+                    $desc      = $p->description;
                     $unitPrice = (float) $p->unit_rate;
                 }
 
-                $lineTotal = round($qty * $unitPrice, 2);
-                $subtotal += $lineTotal;
+                $grossLine = round($qty * $unitPrice, 2);
+                $discAmt   = round($grossLine * ($discountPct / 100), 2);
+                $netLine   = round($grossLine - $discAmt, 2);
 
-                // snapshot tax
+                $subtotalGross += $grossLine;
+                $discountTotal += $discAmt;
+
                 $taxName = null;
                 $taxRate = 0.0;
 
@@ -613,17 +672,15 @@ class QuoteController extends Controller
                     $taxRate = (float) $t->rate;
                 }
 
-                $lineTax = round($lineTotal * ($taxRate / 100), 2);
+                $lineTax = round($netLine * ($taxRate / 100), 2);
                 $taxTotal += $lineTax;
 
                 $snapshotItems[] = [
                     'tenant_id'   => $tenant->id,
                     'product_id'  => $productId,
                     'tax_type_id' => $taxTypeId,
-
                     'position'    => $pos,
 
-                    // ✅ NEW snapshots
                     'sku'         => $sku,
                     'unit'        => $unit,
 
@@ -632,22 +689,25 @@ class QuoteController extends Controller
                     'qty'         => $qty,
                     'unit_price'  => $unitPrice,
 
-                    'line_total'  => $lineTotal,
+                    'discount_pct'    => $discountPct,
+                    'discount_amount' => $discAmt,
 
-                    // VAT snapshot
+                    'line_total'  => $netLine, // net excl VAT
+
                     'tax_name'    => $taxName,
                     'tax_rate'    => $taxRate,
                     'tax_amount'  => $lineTax,
                 ];
             }
 
-            $subtotal = round($subtotal, 2);
-            $taxTotal = round($taxTotal, 2);
-            $total = round($subtotal + $taxTotal, 2);
+            $subtotalGross = round($subtotalGross, 2);
+            $discountTotal = round($discountTotal, 2);
+            $taxTotal      = round($taxTotal, 2);
 
-            $effectiveRate = $subtotal > 0
-                ? round(($taxTotal / $subtotal) * 100, 2)
-                : 0;
+            $netSubtotal = round($subtotalGross - $discountTotal, 2);
+            $total       = round($netSubtotal + $taxTotal, 2);
+
+            $effectiveRate = $netSubtotal > 0 ? round(($taxTotal / $netSubtotal) * 100, 2) : 0;
 
             $quote->update([
                 'deal_id' => $data['deal_id'] ?? null,
@@ -660,9 +720,11 @@ class QuoteController extends Controller
                 'valid_until' => $data['valid_until'] ?? null,
                 'status' => $data['status'] ?? $quote->status,
 
-                // header totals (derived from line snapshots)
+                'customer_reference' => $data['customer_reference'] ?? null,
+
                 'tax_rate' => $effectiveRate,
-                'subtotal' => $subtotal,
+                'subtotal' => $subtotalGross,
+                'discount_amount' => $discountTotal,
                 'tax_amount' => $taxTotal,
                 'total' => $total,
 
@@ -682,38 +744,185 @@ class QuoteController extends Controller
         });
     }
 
+    public function convertToInvoice(string $tenantKey, Quote $quote)
+    {
+        $tenant = app('tenant');
+        abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
-
-
-   private function nextQuoteNumber(int $tenantId): string
-{
-    return DB::transaction(function () use ($tenantId) {
-
-        // 1) Ensure the sequence row exists (race-safe because tenant_id is UNIQUE)
-        // If two requests try this at the same time, only one insert succeeds.
-        try {
-            QuoteSequence::firstOrCreate(
-                ['tenant_id' => $tenantId],
-                ['prefix' => 'Q-', 'next_number' => 1]
-            );
-        } catch (\Illuminate\Database\QueryException $e) {
-            // Another request created it first (unique constraint hit) -> ignore and continue
+        if (!tenant_feature($tenant, 'invoicing_convert_from_quote')) {
+            return back()->with('error', 'Quote → Invoice conversion is available on the Pro plan.');
         }
 
-        // 2) Lock the existing row for this tenant and generate the next number
-        $seq = QuoteSequence::where('tenant_id', $tenantId)
-            ->lockForUpdate()
-            ->firstOrFail();
+        if (strtolower((string) $quote->status) !== 'accepted') {
+            return back()->with('error', 'Only accepted quotes can be converted to an invoice.');
+        }
 
-        $next = (int) $seq->next_number;
-        $prefix = (string) ($seq->prefix ?? 'Q-');
+        $quote->load([
+            'items' => fn ($q) => $q->orderBy('position'),
+            'company',
+            'contact',
+            'deal',
+        ]);
 
-        $number = $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+        if (!$quote->company_id) {
+            return back()->with('error', 'This quote has no company/customer. Please attach a company before converting.');
+        }
 
-        // 3) Increment atomically while the row is locked
-        $seq->update(['next_number' => $next + 1]);
+        if ($quote->items->isEmpty()) {
+            return back()->with('error', 'This quote has no items. Add at least one item before converting.');
+        }
 
-        return $number;
+        $existing = Invoice::where('tenant_id', $tenant->id)
+            ->where('quote_id', $quote->id)
+            ->first();
+
+        if ($existing) {
+            return redirect()
+                ->to(tenant_route('tenant.invoices.show', $existing))
+                ->with('success', 'An invoice already exists for this quote. Redirected to the invoice.');
+        }
+
+        return DB::transaction(function () use ($tenant, $quote) {
+
+            $invoiceNumber = $this->generateInvoiceNumber($tenant->id);
+
+            // Copy header totals (your quote now stores gross subtotal + discount separately)
+            $subtotal       = (float) ($quote->subtotal ?? 0);
+            $discountAmount = (float) ($quote->discount_amount ?? 0);
+            $taxAmount      = (float) ($quote->tax_amount ?? 0);
+            $total          = (float) ($quote->total ?? 0);
+            $taxRate        = (float) ($quote->tax_rate ?? 0);
+
+            $reference = $quote->quote_number; // editable later on Invoice edit screen
+
+            $invoice = Invoice::create([
+                'tenant_id' => $tenant->id,
+
+                'invoice_number' => $invoiceNumber, // ✅ REQUIRED
+                'quote_id'     => $quote->id,
+                'quote_number' => $quote->quote_number,
+                'reference'    => $reference,
+
+                'deal_id'    => $quote->deal_id,
+                'company_id' => $quote->company_id,
+                'contact_id' => $quote->contact_id,
+
+                'owner_user_id'        => $quote->owner_user_id,
+                'sales_person_user_id' => $quote->sales_person_user_id,
+
+                'status'    => 'draft',
+                'issued_at' => now()->toDateString(),
+                'due_at'    => null,
+
+                'currency'  => $quote->currency ?? 'ZAR',
+
+                'subtotal'        => $subtotal,
+                'discount_amount' => $discountAmount,
+                'tax_rate'        => $taxRate,
+                'tax_amount'      => $taxAmount,
+                'total'           => $total,
+
+                'notes' => $quote->notes,
+                'terms' => $quote->terms,
+            ]);
+
+            foreach ($quote->items as $it) {
+                $invoice->items()->create([
+                    'tenant_id'   => $tenant->id,
+                    'product_id'  => $it->product_id ?? null,
+                    'tax_type_id' => $it->tax_type_id ?? null,
+                    'position'    => $it->position ?? 0,
+
+                    'sku'         => $it->sku ?? null,
+                    'unit'        => $it->unit ?? null,
+
+                    'name'        => $it->name,
+                    'description' => $it->description,
+
+                    'qty'         => (float) $it->qty,
+                    'unit_price'  => (float) $it->unit_price,
+
+                    'discount_pct'    => (float) ($it->discount_pct ?? 0),
+                    'discount_amount' => (float) ($it->discount_amount ?? 0),
+
+                    'tax_name'    => $it->tax_name ?? null,
+                    'tax_rate'    => (float) ($it->tax_rate ?? 0),
+
+                    'line_total'  => (float) $it->line_total, // net excl VAT
+                    'tax_amount'  => (float) $it->tax_amount,
+                ]);
+            }
+
+            // Link back to quote ONLY IF those columns exist
+            if (Schema::hasColumn('quotes', 'invoice_id')) {
+                $quote->forceFill([
+                    'invoice_id' => $invoice->id,
+                ]);
+            }
+            if (Schema::hasColumn('quotes', 'invoice_number')) {
+                $quote->forceFill([
+                    'invoice_number' => $invoice->invoice_number,
+                ]);
+            }
+            if (Schema::hasColumn('quotes', 'invoiced_at')) {
+                $quote->forceFill([
+                    'invoiced_at' => now(),
+                ]);
+            }
+            if (Schema::hasColumn('quotes', 'invoicing_status')) {
+                $quote->forceFill([
+                    'invoicing_status' => 'draft',
+                ]);
+            }
+            if ($quote->isDirty()) {
+                $quote->save();
+            }
+
+            return redirect()
+                ->to(tenant_route('tenant.invoices.show', $invoice))
+                ->with('success', 'Invoice created from accepted quote (Draft).');
         });
     }
+
+    private function nextQuoteNumber(int $tenantId): string
+    {
+        return DB::transaction(function () use ($tenantId) {
+
+            try {
+                QuoteSequence::firstOrCreate(
+                    ['tenant_id' => $tenantId],
+                    ['prefix' => 'Q-', 'next_number' => 1]
+                );
+            } catch (\Illuminate\Database\QueryException $e) {
+                // ignore unique constraint race
+            }
+
+            $seq = QuoteSequence::where('tenant_id', $tenantId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $next = (int) $seq->next_number;
+            $prefix = (string) ($seq->prefix ?? 'Q-');
+
+            $number = $prefix . str_pad((string) $next, 5, '0', STR_PAD_LEFT);
+
+            $seq->update(['next_number' => $next + 1]);
+
+            return $number;
+        });
+    }
+
+    protected function generateInvoiceNumber(int $tenantId): string
+    {
+        // Prefer your shared service if you have it
+        if (class_exists(\App\Services\DocumentNumberService::class)) {
+            return app(\App\Services\DocumentNumberService::class)->nextInvoiceNumber($tenantId);
+        }
+
+        // Fallback (works, not perfect under concurrency)
+        $next = (int) \App\Models\Invoice::where('tenant_id', $tenantId)->max('id') + 1;
+
+        return 'INV-' . str_pad((string) $next, 6, '0', STR_PAD_LEFT);
+    }
+
 }

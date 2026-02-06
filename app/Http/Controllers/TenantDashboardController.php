@@ -14,17 +14,17 @@ class TenantDashboardController extends Controller
         $tenant = app('tenant');
 
         // Normalize plan key (handles "Free", " free ", etc.)
-        $plan = strtolower(trim($tenant->plan ?? config('tenant_limits.default_plan', 'free')));
+        $plan = strtolower(trim($tenant->plan ?? config('plans.default_plan', 'free')));
 
         // If plan not defined in config, fallback to default
-        $plans = config('tenant_limits.plans', []);
+        $plans = config('plans.plans', []);
         if (!isset($plans[$plan])) {
-            $plan = config('tenant_limits.default_plan', 'free');
+            $plan = config('plans.default_plan', 'free');
         }
 
         // ✅ IMPORTANT: your config uses flat keys like "deals.max"
         // So we read it like this:
-        $maxDeals = config("tenant_limits.plans.$plan.deals.max"); // int or null
+        $maxDeals = config("plans.plans.$plan.deals.max"); // int or null
 
         $dealCount = Deal::where('tenant_id', $tenant->id)->count();
 

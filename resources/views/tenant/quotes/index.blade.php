@@ -15,9 +15,22 @@
         </div>
 
         @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
-        @endif
+            <div class="alert alert-success alert-dismissible fade show" role="alert" id="flash-success">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
 
+            @push('scripts')
+                <script>
+                    setTimeout(() => {
+                        const el = document.getElementById('flash-success');
+                        if (!el) return;
+                        const alert = bootstrap.Alert.getOrCreateInstance(el);
+                        alert.close();
+                    }, 3500);
+                </script>
+            @endpush
+        @endif
         <div class="card mb-3">
             <div class="card-body">
                 <form method="GET" class="row g-2 align-items-end">

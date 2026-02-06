@@ -19,9 +19,6 @@
 
         $currency = 'R';
         $money = fn($n) => $currency . ' ' . number_format((float) $n, 2);
-
-        $billTo = $quote->company?->billing_address ?: $quote->company?->address ?? '';
-        $shipTo = $quote->company?->shipping_address ?: $quote->company?->address ?? '';
     @endphp
 
     <style>
@@ -260,6 +257,16 @@
                 <a href="{{ tenant_route('tenant.quotes.index') }}" class="btn btn-light">Back</a>
                 <a href="{{ tenant_route('tenant.quotes.edit', ['quote' => $quote->id]) }}"
                     class="btn btn-outline-secondary">Edit</a>
+                @if (strtolower((string) $quote->status) === 'accepted' && tenant_feature(app('tenant'), 'invoicing_convert_from_quote'))
+                    <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}"
+                        class="d-inline">
+                        @csrf
+                        <button class="btn btn-success">
+                            Convert to Invoice
+                        </button>
+                    </form>
+                @endif
+
                 <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
                     class="btn btn-outline-primary">PDF</a>
                 <a href="{{ tenant_route('tenant.quotes.pdf.download', ['quote' => $quote->id]) }}"

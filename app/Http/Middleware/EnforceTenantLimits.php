@@ -12,7 +12,7 @@ class EnforceTenantLimits
         $tenant = app('tenant');
         $plan = $tenant->plan ?? 'free';
 
-        $limits = config("tenant_limits.$plan", config('tenant_limits.free'));
+        $limits = config("plans.$plan", config('plans.free'));
 
         if ($feature === 'deals.create') {
             $max = (int) ($limits['max_deals'] ?? 0);

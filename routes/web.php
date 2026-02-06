@@ -8,8 +8,6 @@ use App\Http\Controllers\TenantDashboardController;
 use App\Http\Controllers\TenantSettingsController;
 
 use App\Http\Controllers\DealController;
-// ✅ Only keep this import if the controller file exists.
-// If you haven't created it yet, comment BOTH this import + the route below.
 use App\Http\Controllers\DealExportController;
 
 use App\Http\Controllers\LeadController;
@@ -27,6 +25,15 @@ use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\QuotePdfController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\TaxTypeController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\InvoicePdfController;
+use App\Http\Controllers\CustomerStatementController;
+use App\Http\Controllers\InvoiceEmailController;
+use App\Http\Controllers\CompanyStatementController;
+use App\Http\Controllers\CompanyContactsController;
+use App\Http\Controllers\CreditNoteController;
+use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\CreditNoteRefundController;
 
 /*
 |--------------------------------------------------------------------------
@@ -187,6 +194,84 @@ Route::prefix('t/{tenant:subdomain}')
 
         Route::post('quotes/{quote}/decline', [QuoteController::class, 'decline'])
             ->name('tenant.quotes.decline');
+        
+        Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice'])
+            ->name('tenant.quotes.convertToInvoice');
+
+        Route::get('companies/{company}/contacts', [CompanyContactsController::class, 'index'])
+            ->name('tenant.companies.contacts.index');
+
+        Route::resource('invoices', InvoiceController::class)->names('tenant.invoices');
+
+        Route::get('invoices/{invoice}/pdf', [InvoicePdfController::class, 'stream'])
+            ->name('tenant.invoices.pdf.stream');
+
+        Route::get('invoices/{invoice}/pdf/download', [InvoicePdfController::class, 'download'])
+            ->name('tenant.invoices.pdf.download');
+
+
+        // Actions
+        Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])
+            ->name('tenant.invoices.issue');
+
+        Route::post('invoices/{invoice}/mark-paid', [InvoiceController::class, 'markPaid'])
+            ->name('tenant.invoices.markPaid');
+
+        // Statements / Export (Pro)
+        Route::get('invoices/statement', [CustomerStatementController::class, 'index'])
+            ->name('tenant.invoices.statement');
+
+        Route::get('invoices/statement/download', [CustomerStatementController::class, 'download'])
+            ->name('tenant.invoices.statement.download');
+
+        Route::post('invoices/{invoice}/send-email', [InvoiceEmailController::class, 'send'])
+            ->name('tenant.invoices.sendEmail');
+
+        Route::resource('payments', PaymentController::class)
+            ->only(['index','create','store','show']);
+
+        Route::resource('credit-notes', CreditNoteController::class)
+            ->only(['index','create','store','show']);
+
+        // Credit Note Refunds
+        Route::get('credit-notes/{creditNote}/refund', [CreditNoteRefundController::class, 'create'])
+            ->name('tenant.credit_notes.refund.create');
+        Route::post('credit-notes/{creditNote}/refund', [CreditNoteRefundController::class, 'store'])
+            ->name('tenant.credit_notes.refund.store');
+
+        // Ledger-style statement (company)
+        Route::get('companies/{company}/statement', [CompanyStatementController::class, 'show'])
+            ->name('tenant.companies.statement');
+
+
+
+        Route::resource('payments', PaymentController::class);
+        Route::resource('credit-notes', CreditNoteController::class);
+
+
+        // routes/tenant.php (or wherever your tenant routes are)
+        Route::get('reports/statement', [CustomerStatementController::class, 'index'])
+            ->name('tenant.reports.statement');
+
+        Route::get('reports/statement/pdf', [CustomerStatementController::class, 'pdf'])
+            ->name('tenant.reports.statement.pdf');
+
+        Route::get('reports/statement/csv', [CustomerStatementController::class, 'csv'])
+            ->name('tenant.reports.statement.csv');
+        /*
+        |Company Statement (inside company profile)
+        */
+        Route::get('companies/{company}/statement', [CompanyStatementController::class, 'show'])
+            ->name('tenant.companies.statement');
+
+        Route::get('companies/{company}/statement/pdf', [CompanyStatementController::class, 'pdf'])
+            ->name('tenant.companies.statement.pdf');
+
+        Route::get('companies/{company}/statement/csv', [CompanyStatementController::class, 'csv'])
+            ->name('tenant.companies.statement.csv');
+
+        Route::post('companies/{company}/statement/email', [CompanyStatementController::class, 'email'])
+            ->name('tenant.companies.statement.email');
 
         /*
         |Products

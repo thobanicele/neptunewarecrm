@@ -210,7 +210,7 @@ class DealController extends Controller
         return view('tenant.deals.show', compact('tenant', 'deal', 'activities'));
     }
 
-
+   
 
     // ✅ IMPORTANT: tenant param first
     public function edit(Tenant $tenant, Contact $deal)

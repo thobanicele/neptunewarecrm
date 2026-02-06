@@ -29,7 +29,7 @@
                 <a href="{{ tenant_route('tenant.deals.index') }}" class="btn btn-outline-secondary">Back</a>
                 <a href="{{ tenant_route('tenant.deals.edit', ['deal' => $deal->id]) }}"
                     class="btn btn-outline-primary">Edit</a>
-                <a href="{{ tenant_route('quotes.create', ['deal_id' => $deal->id]) }}" class="btn btn-primary">
+                <a href="{{ tenant_route('tenant.quotes.create', ['deal_id' => $deal->id]) }}" class="btn btn-primary">
                     + Create Quote
                 </a>
 

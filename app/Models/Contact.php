@@ -28,5 +28,20 @@ class Contact extends Model
         return $this->morphMany(Activity::class, 'subject')->latest();
     }
 
+    public function setEmailAttribute($value): void
+    {
+        $value = is_string($value) ? trim($value) : $value;
+        $this->attributes['email'] = ($value === '' || $value === null) ? null : mb_strtolower($value);
+    }
+
+    public function setPhoneAttribute($value): void
+    {
+        $value = is_string($value) ? trim($value) : $value;
+        $value = ($value === '' || $value === null) ? null : preg_replace('/\s+/', '', $value);
+        $this->attributes['phone'] = $value;
+    }
+
+
+
 }
 

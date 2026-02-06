@@ -4,47 +4,41 @@ namespace App\Support;
 
 class TenantPlan
 {
-    public static function planKey(?string $plan): string
+    public static function resolve(?string $plan): string
     {
-        $plan = $plan ?: config('tenant_limits.default_plan');
-        return array_key_exists($plan, config('tenant_limits.plans'))
-            ? $plan
-            : config('tenant_limits.default_plan');
+        $plan = $plan ?: config('plans.default_plan', 'free');
+
+        // safety: if unknown plan stored in DB, fall back
+        if (!array_key_exists($plan, config('plans.plans', []))) {
+            $plan = config('plans.default_plan', 'free');
+        }
+
+        return $plan;
     }
 
-    /** Get current tenant plan (from app('tenant')) */
-    public static function currentPlanKey(): string
+    public static function feature(?string $plan, string $feature, bool $default = false): bool
     {
-        $tenant = app()->bound('tenant') ? app('tenant') : null;
-        return self::planKey($tenant?->plan);
+        $plan = self::resolve($plan);
+
+        return (bool) data_get(
+            config("plans.plans.$plan.features", []),
+            $feature,
+            $default
+        );
     }
 
-    /** Limit for a specific plan key */
-    public static function limit(string $plan, string $key, $default = null)
+    public static function limit(?string $plan, string $path, $default = null)
     {
-        $plan = self::planKey($plan);
-        return data_get(config("tenant_limits.plans.$plan"), $key, $default);
-    }
+        $plan = self::resolve($plan);
 
-    /** Limit for current tenant */
-    public static function currentLimit(string $key, $default = null)
-    {
-        $plan = self::currentPlanKey();
-        return data_get(config("tenant_limits.plans.$plan"), $key, $default);
-    }
-
-    /** Feature flag for a specific plan key */
-    public static function feature(string $plan, string $feature, bool $default = false): bool
-    {
-        $plan = self::planKey($plan);
-        return (bool) data_get(config("tenant_limits.plans.$plan.features"), $feature, $default);
-    }
-
-    /** Feature flag for current tenant */
-    public static function currentFeature(string $feature, bool $default = false): bool
-    {
-        $plan = self::currentPlanKey();
-        return (bool) data_get(config("tenant_limits.plans.$plan.features"), $feature, $default);
+        return data_get(
+            config("plans.plans.$plan", []),
+            $path,
+            $default
+        );
     }
 }
+
+
+
 

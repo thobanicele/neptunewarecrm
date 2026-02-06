@@ -19,6 +19,7 @@
                             <th>Phone</th>
                             <th>Company</th>
                             <th>Stage</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -29,6 +30,26 @@
                                 <td>{{ $c->phone ?? '—' }}</td>
                                 <td>{{ $c->company?->name ?? '—' }}</td>
                                 <td>{{ ucfirst($c->lifecycle_stage) }}</td>
+                                <td class="d-flex gap-2">
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                        href="{{ tenant_route('tenant.contacts.show', $c) }}">
+                                        View
+                                    </a>
+
+                                    <a class="btn btn-sm btn-outline-primary"
+                                        href="{{ tenant_route('tenant.contacts.edit', $c) }}">
+                                        Edit
+                                    </a>
+
+                                    <form method="POST" action="{{ tenant_route('tenant.contacts.destroy', $c) }}"
+                                        onsubmit="return confirm('Delete this contact?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

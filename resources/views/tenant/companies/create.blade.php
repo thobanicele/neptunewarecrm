@@ -29,7 +29,7 @@
                     {{-- Company details --}}
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
-                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <label class="form-label">Company Name <span class="text-danger">*</span></label>
                             <input class="form-control" name="name" value="{{ old('name') }}" required>
                         </div>
 

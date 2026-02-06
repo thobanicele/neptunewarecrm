@@ -14,7 +14,7 @@
         <div class="p-4 rounded border bg-gray-50">
             <p><b>Current plan:</b> {{ $tenant->plan }}</p>
             <p class="mt-2 text-sm text-gray-600">
-                Free plan limits deals to {{ config('tenant_limits.free.max_deals') }}.
+                Free plan limits deals to {{ config('plans.free.max_deals') }}.
             </p>
         </div>
 
