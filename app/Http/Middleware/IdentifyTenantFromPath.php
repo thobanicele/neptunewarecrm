@@ -21,6 +21,7 @@ class IdentifyTenantFromPath
         }
 
         app()->instance('tenant', $tenant);
+        
         app()->instance('currentTenant', $tenant);
 
         $user = $request->user();

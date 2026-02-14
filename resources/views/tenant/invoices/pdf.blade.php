@@ -366,6 +366,13 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
     </table>
 
     {{-- TOTALS --}}
+    @php
+        $paymentsApplied = (float) ($paymentsApplied ?? 0);
+        $creditsApplied = (float) ($creditsApplied ?? 0);
+        $appliedLine = $paymentsApplied + $creditsApplied; // combined
+        $balanceDue = (float) ($balanceDue ?? max(0, ((float) $grand) - $appliedLine));
+    @endphp
+
     <table width="100%" style="margin-top:12px;">
         <tr>
             <td></td>
@@ -389,14 +396,39 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                         </td>
                         <td class="right strong nowrap">{{ $money($vat) }}</td>
                     </tr>
+
                     <tr class="grand">
                         <td class="right">Total</td>
                         <td class="right nowrap">{{ $money($grand) }}</td>
                     </tr>
+
+                    {{-- NEW: Payments/Credits line (combined, red, negative) --}}
+                    <tr>
+                        <td classs="label right">Payments / Credits</td>
+                        <td class="right strong nowrap" style="color:#b00020;">
+                            - {{ $money($appliedLine) }}
+                        </td>
+                    </tr>
+
+                    {{-- NEW: Balance Due --}}
+                    <tr class="grand">
+                        <td class="right">Balance Due</td>
+                        <td class="right nowrap">{{ $money($balanceDue) }}</td>
+                    </tr>
+
+                    {{-- Optional small breakdown line --}}
+                    {{-- 
+                <tr>
+                    <td colspan="2" class="right" style="font-size:11px;color:#666;">
+                        Payments: {{ $money($paymentsApplied) }} • Credits: {{ $money($creditsApplied) }}
+                    </td>
+                </tr>
+                --}}
                 </table>
             </td>
         </tr>
     </table>
+
 
     {{-- FOOTER --}}
     <table width="100%" style="margin-top:14px;">

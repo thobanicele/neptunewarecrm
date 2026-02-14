@@ -6,38 +6,55 @@ use App\Models\Company;
 use App\Models\Contact;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
 
 class LeadController extends Controller
 {
     public function index(Request $request, Tenant $tenant)
     {
-        // If you prefer your middleware-bound tenant, keep this line:
         $tenant = app('tenant');
+        $canExport = tenant_feature($tenant, 'export');
 
-        $q = trim((string) $request->query('q', ''));
+        $q     = trim((string) $request->query('q', ''));
         $stage = (string) $request->query('stage', '');
+
+        // sorting
+        $sort = (string) $request->query('sort', 'created_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // allowed sorts (keep it simple for leads)
+        $allowedSorts = ['name','email','phone','lead_stage','created_at','updated_at'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'created_at';
 
         $leadStages = Contact::leadStages();
 
-        $leads = Contact::query()
+        $leadsQuery = Contact::query()
             ->where('tenant_id', $tenant->id)
             ->where('lifecycle_stage', 'lead')
-            ->when($stage, fn ($qq) => $qq->where('lead_stage', $stage))
-            ->when($q, function ($qq) use ($q) {
+            ->when($stage !== '', fn ($qq) => $qq->where('lead_stage', $stage))
+            ->when($q !== '', function ($qq) use ($q) {
                 $qq->where(function ($w) use ($q) {
                     $w->where('name', 'like', "%{$q}%")
-                      ->orWhere('email', 'like', "%{$q}%")
-                      ->orWhere('phone', 'like', "%{$q}%");
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
                 });
-            })
-            ->latest()
+            });
+
+        // apply sorting
+        $leadsQuery->orderBy($sort, $dir)->orderByDesc('id');
+
+        $leads = $leadsQuery
             ->paginate(20)
             ->withQueryString();
 
         $companies = Company::where('tenant_id', $tenant->id)->orderBy('name')->get();
 
-        return view('tenant.leads.index', compact('tenant','leads','leadStages','stage','q','companies'));
+        return view('tenant.leads.index', compact(
+            'tenant','leads','leadStages','stage','q','companies','sort','dir','canExport'
+        ));
     }
+
 
     public function kanban(Tenant $tenant)
     {
@@ -154,6 +171,69 @@ class LeadController extends Controller
         return redirect()->to(tenant_route('tenant.leads.index'))
             ->with('success', 'Lead deleted.');
     }
+
+    public function export(Request $request, string $tenantKey): StreamedResponse
+    {
+        $tenant = app('tenant');
+
+        // ✅ Premium gate
+        if (!tenant_feature($tenant, 'export')) {
+            return back()->with('error', 'Export to Excel is available on the Premium plan.');
+        }
+
+        // same filters as index
+        $q     = trim((string) $request->query('q', ''));
+        $stage = (string) $request->query('stage', '');
+
+        // same sorting as index
+        $sort = (string) $request->query('sort', 'created_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = ['name','email','phone','lead_stage','created_at','updated_at'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'created_at';
+
+        $rows = Contact::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('lifecycle_stage', 'lead')
+            ->when($stage !== '', fn ($qq) => $qq->where('lead_stage', $stage))
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
+                });
+            })
+            ->orderBy($sort, $dir)
+            ->orderByDesc('id')
+            ->get([
+                'name','email','phone','lead_stage',
+                'created_at','updated_at',
+            ]);
+
+        $filename = 'leads-' . now()->format('Ymd-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+
+            fputcsv($out, ['Name','Email','Phone','Stage','Created','Updated']);
+
+            foreach ($rows as $lead) {
+                fputcsv($out, [
+                    $lead->name,
+                    $lead->email,
+                    $lead->phone,
+                    $lead->lead_stage,
+                    optional($lead->created_at)->format('Y-m-d H:i'),
+                    optional($lead->updated_at)->format('Y-m-d H:i'),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
 }
 
 

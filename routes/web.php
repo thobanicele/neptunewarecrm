@@ -34,6 +34,9 @@ use App\Http\Controllers\CompanyContactsController;
 use App\Http\Controllers\CreditNoteController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\CreditNoteRefundController;
+use App\Http\Controllers\CreditNotePdfController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\TenantUserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -50,6 +53,11 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/app', function () {
     $user = auth()->user();
 
+    if (!$user || $user->is_active === false) {
+        auth()->logout();
+        return redirect()->route('login')->with('error', 'Your account is inactive.');
+    }
+
     if ($user->hasRole('super_admin')) {
         return redirect()->route('admin.dashboard');
     }
@@ -58,7 +66,6 @@ Route::get('/app', function () {
         return redirect()->route('tenant.onboarding.create');
     }
 
-    // {tenant:subdomain} route model binding accepts model instance
     return redirect()->route('tenant.dashboard', ['tenant' => $user->tenant]);
 })->middleware('auth')->name('app.home');
 
@@ -84,7 +91,9 @@ Route::middleware(['auth', 'no.tenant'])->group(function () {
 Route::prefix('t/{tenant:subdomain}')
     ->middleware([
         'auth',
+        'active.user', 
         'identify.tenant.path',
+        'set.permission.tenant',
         'role:super_admin|tenant_owner|tenant_admin|tenant_staff',
     ])
     // ✅ IMPORTANT: remove scopeBindings() unless your Tenant model has
@@ -93,9 +102,34 @@ Route::prefix('t/{tenant:subdomain}')
     ->group(function () {
 
         /*
+        |Tenant User Permissions
+        */
+        Route::middleware(['role:tenant_owner|tenant_admin|super_admin'])->group(function () {
+            Route::get('settings/users', [TenantUserController::class, 'index'])
+                ->name('tenant.settings.users.index');
+
+            Route::post('settings/users/invite', [TenantUserController::class, 'invite'])
+                ->name('tenant.settings.users.invite');
+
+            Route::patch('settings/users/{user}/role', [TenantUserController::class, 'updateRole'])
+                ->name('tenant.settings.users.role');
+
+            Route::patch('settings/users/{user}/deactivate', [TenantUserController::class, 'deactivate'])
+                ->name('tenant.settings.users.deactivate');
+
+            Route::delete('settings/users/{user}', [TenantUserController::class, 'destroy'])
+                ->name('tenant.settings.users.destroy');
+        });
+        
+        // Public invite accept link (works before tenant membership)
+        Route::get('/invites/accept/{token}', [TenantUserController::class, 'accept'])
+            ->name('tenant.invites.accept');
+
+
+        /*
         | Dashboard
         */
-        Route::get('/dashboard', [TenantDashboardController::class, 'index'])
+        Route::get('dashboard', [DashboardController::class, 'index'])
             ->name('tenant.dashboard');
 
         /*
@@ -111,9 +145,28 @@ Route::prefix('t/{tenant:subdomain}')
         Route::put('/leads/{contact}', [LeadController::class, 'update'])->name('tenant.leads.update');
         Route::delete('/leads/{contact}', [LeadController::class, 'destroy'])->name('tenant.leads.destroy');
 
+        /*
+        |Leads Export Premium-feature
+        */
+        Route::get('leads/export', [LeadController::class, 'export'])
+            ->name('tenant.leads.export');
+
+
         // Lead lifecycle actions (kanban / qualify)
         Route::patch('/leads/{contact}/stage', [LeadLifecycleController::class, 'updateStage'])->name('tenant.leads.stage');
         Route::post('/leads/{contact}/qualify', [LeadLifecycleController::class, 'qualify'])->name('tenant.leads.qualify');
+
+        /*
+        |Contacts Export Premium-feature
+        */
+        Route::get('contacts/export', [ContactController::class, 'export'])
+            ->name('tenant.contacts.export');
+
+        /*
+        |Caompanies Export Premium-feature
+        */
+        Route::get('companies/export', [CompanyController::class, 'export'])
+            ->name('tenant.companies.export');
 
         /*
         | Companies / Contacts
@@ -137,8 +190,14 @@ Route::prefix('t/{tenant:subdomain}')
         /*
         | Billing / Upgrade (placeholder)
         */
-        Route::get('/billing/upgrade', [BillingController::class, 'upgrade'])
+        Route::get('billing/upgrade', [BillingController::class, 'upgrade'])
             ->name('tenant.billing.upgrade');
+
+        Route::post('billing/paystack/initialize', [BillingController::class, 'paystackInitialize'])
+            ->name('tenant.billing.paystack.initialize');
+
+        Route::get('billing/paystack/callback', [BillingController::class, 'paystackCallback'])
+            ->name('tenant.billing.paystack.callback');
 
         /*
         | Deals Kanban
@@ -164,6 +223,12 @@ Route::prefix('t/{tenant:subdomain}')
             ->name('tenant.deals.export');
 
         /*
+        |Activities Export Premium-feature
+        */
+        Route::get('activities/followups/export', [ActivityController::class, 'followupsExport'])
+            ->name('tenant.activities.followups.export');
+        
+        /*
         |Activities Routes
         */
         Route::post('activities', [ActivityController::class, 'store'])->name('tenant.activities.store');
@@ -178,6 +243,12 @@ Route::prefix('t/{tenant:subdomain}')
         /*
         |Quotes
         */
+        /*
+        |Quotes Export Pro-feature
+        */
+        Route::get('quotes/export', [QuoteController::class, 'export'])
+            ->name('tenant.quotes.export');
+            
         Route::resource('quotes', QuoteController::class)->names('tenant.quotes');;
 
         Route::get('quotes/{quote}/pdf', [QuotePdfController::class, 'stream'])
@@ -198,9 +269,15 @@ Route::prefix('t/{tenant:subdomain}')
         Route::post('quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice'])
             ->name('tenant.quotes.convertToInvoice');
 
+
+
         Route::get('companies/{company}/contacts', [CompanyContactsController::class, 'index'])
             ->name('tenant.companies.contacts.index');
-
+        /*
+        |InvoicesExport Premium-feature
+        */
+        Route::get('invoices/export', [InvoiceController::class, 'export'])
+            ->name('tenant.invoices.export');
         Route::resource('invoices', InvoiceController::class)->names('tenant.invoices');
 
         Route::get('invoices/{invoice}/pdf', [InvoicePdfController::class, 'stream'])
@@ -227,11 +304,44 @@ Route::prefix('t/{tenant:subdomain}')
         Route::post('invoices/{invoice}/send-email', [InvoiceEmailController::class, 'send'])
             ->name('tenant.invoices.sendEmail');
 
-        Route::resource('payments', PaymentController::class)
-            ->only(['index','create','store','show']);
+        /*
+        |Payment Exports Premium-feature
+        */
+        Route::get('payments/export', [PaymentController::class, 'export'])
+            ->name('tenant.payments.export');
+
+        Route::resource('payments', PaymentController::class)->names('tenant.payments');
+
+        Route::get('payments', [PaymentController::class, 'index'])->name('tenant.payments.index');
+        Route::get('payments/{payment}/allocate', [PaymentController::class, 'allocateForm'])
+            ->name('tenant.payments.allocate.form');
+
+        Route::post('payments/{payment}/allocate', [PaymentController::class, 'allocateStore'])
+            ->name('tenant.payments.allocate.store');
+
+        Route::delete('payments/{payment}/allocations/{allocation}', [PaymentController::class, 'allocationDestroy'])
+            ->name('tenant.payments.allocations.destroy');
+
+        Route::delete('payments/{payment}/allocations', [PaymentController::class, 'allocationsReset'])
+            ->name('tenant.payments.allocations.reset');
+
+        /*
+        |Credit Notes Export Premium-feature
+        */
+        Route::get('credit-notes/export', [CreditNoteController::class, 'export'])
+            ->name('tenant.credit-notes.export');
 
         Route::resource('credit-notes', CreditNoteController::class)
-            ->only(['index','create','store','show']);
+            ->names('tenant.credit-notes');
+
+        Route::get('credit-notes', [CreditNoteController::class, 'index'])->name('tenant.credit-notes.index');
+
+        // PDF (same pattern as invoice/quote)
+        Route::get('credit-notes/{credit_note}/pdf', [CreditNotePdfController::class, 'stream'])
+            ->name('tenant.credit-notes.pdf.stream');
+
+        Route::get('credit-notes/{credit_note}/pdf/download', [CreditNotePdfController::class, 'download'])
+            ->name('tenant.credit-notes.pdf.download');
 
         // Credit Note Refunds
         Route::get('credit-notes/{creditNote}/refund', [CreditNoteRefundController::class, 'create'])
@@ -242,11 +352,6 @@ Route::prefix('t/{tenant:subdomain}')
         // Ledger-style statement (company)
         Route::get('companies/{company}/statement', [CompanyStatementController::class, 'show'])
             ->name('tenant.companies.statement');
-
-
-
-        Route::resource('payments', PaymentController::class);
-        Route::resource('credit-notes', CreditNoteController::class);
 
 
         // routes/tenant.php (or wherever your tenant routes are)
@@ -272,10 +377,16 @@ Route::prefix('t/{tenant:subdomain}')
 
         Route::post('companies/{company}/statement/email', [CompanyStatementController::class, 'email'])
             ->name('tenant.companies.statement.email');
+            
+        Route::get('companies/{company}/open-invoices', [PaymentController::class, 'openInvoices'])
+            ->name('tenant.companies.openInvoices');
+
 
         /*
         |Products
         */  
+        Route::get('products/export', [ProductController::class, 'export'])
+            ->name('tenant.products.export');
         Route::resource('products', ProductController::class)->names('tenant.products');
 
         /*
@@ -319,10 +430,16 @@ Route::prefix('t/{tenant:subdomain}')
     });
 
 /*
+
 |--------------------------------------------------------------------------
 | Super Admin (base domain only)
 |--------------------------------------------------------------------------
 */
+
+// webhook (outside auth, Paystack server calls this)
+Route::post('/paystack/webhook', [BillingWebhookController::class, 'handle'])
+    ->name('paystack.webhook');
+
 Route::middleware(['auth', 'role:super_admin'])->group(function () {
     Route::get('/admin', function () {
         return 'Super Admin Panel';

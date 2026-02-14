@@ -22,11 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'identify.tenant.path' => \App\Http\Middleware\IdentifyTenantFromPath::class,
             'no.tenant' => \App\Http\Middleware\EnsureUserHasNoTenant::class,
             'tenant' => \App\Http\Middleware\TenantMiddleware::class,
-            'tenant.limits' => \App\Http\Middleware\EnforceTenantLimits::class,
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'tenant.limits' => \App\Http\Middleware\TenantLimits::class,
+            'set.permission.tenant' => \App\Http\Middleware\SetPermissionTenant::class,
+            'active.user' => \App\Http\Middleware\EnsureUserIsActive::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

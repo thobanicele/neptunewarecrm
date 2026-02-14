@@ -10,33 +10,120 @@ use App\Models\Product;
 use App\Models\TaxType;
 use App\Models\User;
 use App\Models\Tenant;
+use App\Models\TransactionAllocation;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Carbon;
 use App\Services\DocumentNumberService;
+use App\Services\InvoicePaymentStatusService;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 
 class InvoiceController extends Controller
 {
-    public function index(string $tenantKey)
+    public function index(string $tenantKey, \Illuminate\Http\Request $request)
     {
         $tenant = app('tenant');
 
-        $invoices = Invoice::query()
-            ->where('tenant_id', $tenant->id)
-            ->with(['company'])
-            ->latest('updated_at')
+        $q = trim((string) $request->query('q', ''));
+
+        // filters
+        $status = (string) $request->query('status', ''); // draft|issued|void|''
+        $payment_status = (string) $request->query('payment_status', ''); // unpaid|partially_paid|paid|''
+
+        $sales_person_user_id = $request->query('sales_person_user_id');
+
+        // sorting
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // Only allow safe sorts
+        $allowedSorts = [
+            'invoice_number',
+            'reference',
+            'status',
+            'subtotal',
+            'total',
+            'payment_status',
+            'issued_at',
+            'updated_at',
+            'created_at',
+
+            // component "virtual" keys we'll map below
+            'company',
+            'sales_person',
+        ];
+        if (!in_array($sort, $allowedSorts, true)) {
+            $sort = 'updated_at';
+        }
+
+        $query = Invoice::query()
+            ->where('invoices.tenant_id', $tenant->id)
+            ->with(['company', 'salesPerson']) // adjust relation name if different
+            ->when($q !== '', function ($qry) use ($q) {
+                $qry->where(function ($x) use ($q) {
+                    $x->where('invoices.invoice_number', 'like', "%{$q}%")
+                        ->orWhere('invoices.reference', 'like', "%{$q}%")
+                        ->orWhere('invoices.quote_number', 'like', "%{$q}%")
+                        ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                });
+            })
+            ->when($status !== '', fn ($qry) => $qry->where('invoices.status', $status))
+            ->when($payment_status !== '', fn ($qry) => $qry->where('invoices.payment_status', $payment_status))
+            ->when($sales_person_user_id, fn ($qry) => $qry->where('invoices.sales_person_user_id', $sales_person_user_id));
+
+        // Sorting (handle relation-based sorts)
+        if ($sort === 'company') {
+            $query->leftJoin('companies', function ($join) use ($tenant) {
+                $join->on('companies.id', '=', 'invoices.company_id')
+                    ->where('companies.tenant_id', '=', $tenant->id);
+            })
+            ->select('invoices.*')
+            ->orderBy('companies.name', $dir);
+        } elseif ($sort === 'sales_person') {
+            $query->leftJoin('users as sp', function ($join) use ($tenant) {
+                $join->on('sp.id', '=', 'invoices.sales_person_user_id')
+                    ->where('sp.tenant_id', '=', $tenant->id);
+            })
+            ->select('invoices.*')
+            ->orderBy('sp.name', $dir);
+        } else {
+            $query->orderBy("invoices.$sort", $dir);
+        }
+
+        // secondary tie-breaker for stable ordering
+        $query->orderByDesc('invoices.id');
+
+        $invoices = $query
             ->paginate(20)
             ->withQueryString();
 
-        return view('tenant.invoices.index', compact('invoices'));
+        $salesPeople = \App\Models\User::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
+        return view('tenant.invoices.index', compact(
+            'tenant',
+            'invoices',
+            'salesPeople',
+            'q',
+            'status',
+            'payment_status',
+            'sales_person_user_id',
+            'sort',
+            'dir'
+        ));
     }
+
 
     public function show(Tenant $tenant, Invoice $invoice)
     {
         abort_unless((int) $invoice->tenant_id === (int) $tenant->id, 404);
 
+        // Load everything your invoice UI already uses + allocations (with source docs)
         $invoice->load([
             'items' => fn ($q) => $q->orderBy('position'),
             'company.addresses.country',
@@ -44,9 +131,46 @@ class InvoiceController extends Controller
             'contact',
             'salesPerson',
             'owner',
+
+            // allocations + the source (payment / credit note)
+            'allocations' => fn ($q) => $q->orderBy('applied_at')->orderBy('id'),
+            'allocations.payment',
+            'allocations.creditNote',
         ]);
 
-        // 1) Prefer invoice snapshots (best: stays consistent even if company address changes later)
+        // Totals
+        $total = round((float) $invoice->total, 2);
+
+        // Split totals (optional for UI), but we will also expose combined "payments/credits"
+        $paymentsApplied = round(
+            (float) $invoice->allocations->whereNotNull('payment_id')->sum('amount_applied'),
+            2
+        );
+
+        $creditsApplied = round(
+            (float) $invoice->allocations->whereNotNull('credit_note_id')->sum('amount_applied'),
+            2
+        );
+
+        $paymentsAndCredits = round($paymentsApplied + $creditsApplied, 2);
+
+        // Balance due with tolerance (avoid 0.01 leftovers)
+        $balanceDue = round($total - $paymentsAndCredits, 2);
+
+        $tolerance = 0.01;
+        if ($balanceDue <= $tolerance) $balanceDue = 0.00;
+        if ($balanceDue < 0) $balanceDue = 0.00;
+
+        $isPaid = $balanceDue == 0.00;
+
+        // ✅ payment status you want for the badge (Option A)
+        // Keep invoice->status for lifecycle (draft/issued/void) and compute payment_status here for UI
+        // Later you can persist this in DB via the service when applying allocations.
+        $paymentStatus = ($paymentsAndCredits <= 0.00)
+            ? 'unpaid'
+            : ($isPaid ? 'paid' : 'partially_paid');
+
+        // 1) Prefer invoice snapshots (best)
         $billTo = trim((string) ($invoice->billing_address_snapshot ?? ''));
         $shipTo = trim((string) ($invoice->shipping_address_snapshot ?? ''));
 
@@ -79,8 +203,21 @@ class InvoiceController extends Controller
             }
         }
 
-        return view('tenant.invoices.show', compact('tenant', 'invoice', 'billTo', 'shipTo'));
+        return view('tenant.invoices.show', compact(
+            'tenant',
+            'invoice',
+            'paymentsApplied',
+            'creditsApplied',
+            'paymentsAndCredits', // ✅ use this for a single red “Payments/Credits” line
+            'balanceDue',
+            'isPaid',
+            'paymentStatus',      // ✅ use this for badge: unpaid/partially_paid/paid
+            'billTo',
+            'shipTo',
+        ));
     }
+
+
 
     public function create(Request $request, string $tenantKey)
     {
@@ -495,32 +632,193 @@ class InvoiceController extends Controller
     public function markPaid(string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
-        abort_unless((int)$invoice->tenant_id === (int)$tenant->id, 404);
+        abort_unless((int) $invoice->tenant_id === (int) $tenant->id, 404);
 
-        // Pro-only (as per your plan spec)
+        // Pro-only
         if (!tenant_feature($tenant, 'invoice_email_send')) {
             return back()->with('error', 'Payment tracking is available on the Pro plan. Upgrade to enable paid status, statements and exports.');
         }
 
+        // Still block draft lifecycle invoices (you can adjust if you allow paying drafts)
         if ($invoice->status === 'draft') {
             return back()->with('error', 'Please issue the invoice before marking it as paid.');
         }
 
-        if ($invoice->status === 'paid') {
-            $when = $invoice->paid_at ? $invoice->paid_at->format('d/m/Y H:i') : null;
-            return back()->with('success', 'Invoice is already marked as paid' . ($when ? " (Paid at: {$when})." : '.') );
+        return DB::transaction(function () use ($tenant, $tenantKey, $invoice) {
+
+            // Lock invoice to avoid double mark-paid / race
+            $invoiceLocked = Invoice::query()
+                ->where('tenant_id', $tenant->id)
+                ->lockForUpdate()
+                ->findOrFail($invoice->id);
+
+            // Compute outstanding from allocations (payments + credits)
+            $allocated = (float) TransactionAllocation::query()
+                ->where('tenant_id', $tenant->id)
+                ->where('invoice_id', $invoiceLocked->id)
+                ->sum('amount_applied');
+
+            $total = (float) $invoiceLocked->total;
+            $outstanding = round($total - $allocated, 2);
+
+            // If already settled, just sync payment_status and exit (do not change lifecycle status)
+            if ($outstanding <= 0.009) {
+                app(InvoicePaymentStatusService::class)->syncMany($tenant->id, [$invoiceLocked->id]);
+
+                $when = $invoiceLocked->paid_at ? $invoiceLocked->paid_at->format('d/m/Y H:i') : null;
+                return back()->with('success', 'Invoice is already fully paid' . ($when ? " (Paid at: {$when})." : '.') );
+            }
+
+            // Create a Payment for the outstanding amount
+            $payment = Payment::create([
+                'tenant_id' => $tenant->id,
+                'company_id' => $invoiceLocked->company_id,
+                'contact_id' => $invoiceLocked->contact_id ?? null,
+
+                // Link to invoice (your payments table already has invoice_id)
+                'invoice_id' => $invoiceLocked->id,
+
+                'paid_at' => now(),
+                'amount' => $outstanding,
+
+                // Metadata (optional)
+                'method' => 'manual',
+                'reference' => 'MARK-PAID-' . ($invoiceLocked->invoice_number ?: $invoiceLocked->id),
+                'notes' => 'Created via “Mark as Paid”.',
+                'created_by_user_id' => auth()->id(),
+            ]);
+
+            // Allocate it to THIS invoice
+            TransactionAllocation::create([
+                'tenant_id' => $tenant->id,
+                'invoice_id' => $invoiceLocked->id,
+                'payment_id' => $payment->id,
+                'credit_note_id' => null,
+                'amount_applied' => $outstanding,
+                'applied_at' => now()->toDateString(),
+            ]);
+
+            // Recompute payment_status ONLY (service should not alter lifecycle status)
+            app(InvoicePaymentStatusService::class)->syncMany($tenant->id, [$invoiceLocked->id]);
+
+            return back()->with('success', 'Payment recorded and invoice payment status updated.');
+        });
+    }
+
+    public function export(string $tenantKey, Request $request): StreamedResponse
+    {
+        $tenant = app('tenant');
+
+        // Pro-only (you can swap this to 'export' if that's your final key)
+        if (!tenant_feature($tenant, 'export')) {
+            return back()->with('error', 'Export to Excel is available on the Premium plan.');
         }
 
-        if ($invoice->status !== 'issued') {
-            return back()->with('error', "Only issued invoices can be marked as paid. Current status: {$invoice->status}.");
+        // Same filters/sort as index
+        $q = trim((string) $request->query('q', ''));
+
+        $status = (string) $request->query('status', '');
+        $payment_status = (string) $request->query('payment_status', '');
+        $sales_person_user_id = $request->query('sales_person_user_id');
+
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = [
+            'invoice_number','reference','status','subtotal','total','payment_status',
+            'issued_at','updated_at','created_at','company','sales_person',
+        ];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'updated_at';
+
+        $query = Invoice::query()
+            ->where('invoices.tenant_id', $tenant->id)
+            ->with(['company', 'salesPerson']) // adjust relation name if needed
+            ->when($q !== '', function ($qry) use ($q) {
+                $qry->where(function ($x) use ($q) {
+                    $x->where('invoices.invoice_number', 'like', "%{$q}%")
+                        ->orWhere('invoices.reference', 'like', "%{$q}%")
+                        ->orWhere('invoices.quote_number', 'like', "%{$q}%")
+                        ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                });
+            })
+            ->when($status !== '', fn ($qry) => $qry->where('invoices.status', $status))
+            ->when($payment_status !== '', fn ($qry) => $qry->where('invoices.payment_status', $payment_status))
+            ->when($sales_person_user_id, fn ($qry) => $qry->where('invoices.sales_person_user_id', $sales_person_user_id));
+
+        // Sorting (same mapping as index)
+        if ($sort === 'company') {
+            $query->leftJoin('companies', function ($join) use ($tenant) {
+                    $join->on('companies.id', '=', 'invoices.company_id')
+                        ->where('companies.tenant_id', '=', $tenant->id);
+                })
+                ->select('invoices.*')
+                ->orderBy('companies.name', $dir);
+        } elseif ($sort === 'sales_person') {
+            $query->leftJoin('users as sp', function ($join) use ($tenant) {
+                    $join->on('sp.id', '=', 'invoices.sales_person_user_id')
+                        ->where('sp.tenant_id', '=', $tenant->id);
+                })
+                ->select('invoices.*')
+                ->orderBy('sp.name', $dir);
+        } else {
+            $query->orderBy("invoices.$sort", $dir);
         }
 
-        $invoice->update([
-            'status'  => 'paid',
-            'paid_at' => $invoice->paid_at ?? now(),
+        $query->orderByDesc('invoices.id');
+
+        $rows = $query->get([
+            'invoices.id',
+            'invoices.invoice_number',
+            'invoices.reference',
+            'invoices.quote_number',
+            'invoices.status',
+            'invoices.payment_status',
+            'invoices.subtotal',
+            'invoices.total',
+            'invoices.issued_at',
+            'invoices.created_at',
+            'invoices.updated_at',
+            'invoices.company_id',
+            'invoices.sales_person_user_id',
         ]);
 
-        return back()->with('success', 'Invoice marked as paid.');
+        $filename = 'invoices-' . now()->format('Ymd-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+
+            fputcsv($out, [
+                'Invoice #',
+                'Reference',
+                'Company',
+                'Status',
+                'Payment Status',
+                'Sub Total',
+                'Total',
+                'Issued Date',
+                'Sales Person',
+                'Created',
+                'Updated',
+            ]);
+
+            foreach ($rows as $inv) {
+                fputcsv($out, [
+                    $inv->invoice_number,
+                    $inv->reference ?? $inv->quote_number ?? '',
+                    $inv->company?->name ?? '',
+                    strtoupper((string) $inv->status),
+                    strtoupper((string) $inv->payment_status),
+                    number_format((float) $inv->subtotal, 2, '.', ''),
+                    number_format((float) $inv->total, 2, '.', ''),
+                    $inv->issued_at ? \Illuminate\Support\Carbon::parse($inv->issued_at)->format('Y-m-d') : '',
+                    $inv->salesPerson?->name ?? '',
+                    optional($inv->created_at)->format('Y-m-d H:i'),
+                    optional($inv->updated_at)->format('Y-m-d H:i'),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
 
 }

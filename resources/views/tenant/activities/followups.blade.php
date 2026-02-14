@@ -3,9 +3,15 @@
 @section('content')
     <div class="container py-4">
 
-        <div class="d-flex justify-content-between align-items-start mb-3">
+        <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
             <div>
-                <h3 class="mb-0">Activity List</h3>
+                <h3 class="mb-0 d-flex align-items-center gap-2">
+                    Activity List
+                    <span class="badge bg-light text-dark">
+                        Total: {{ method_exists($items, 'total') ? $items->total() : $items->count() }}
+                    </span>
+                </h3>
+
                 <div class="text-muted small">
                     Due activities (overdue first) • Tenant: {{ $tenant->name }} ({{ $tenant->subdomain }})
                 </div>
@@ -18,59 +24,105 @@
             </div>
 
             <div class="d-flex gap-2">
+                @php $qs = http_build_query(request()->query()); @endphp
+
+                @if (!empty($canExport) && $canExport)
+                    <a href="{{ tenant_route('tenant.activities.followups.export') }}{{ $qs ? '?' . $qs : '' }}"
+                        class="btn btn-outline-secondary">
+                        Export (Excel)
+                    </a>
+                @else
+                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                        class="btn btn-outline-secondary">
+                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                    </a>
+                @endif
+
                 <a href="{{ tenant_route('tenant.deals.index') }}" class="btn btn-outline-secondary">Deals</a>
                 <a href="{{ tenant_route('tenant.leads.index') }}" class="btn btn-outline-secondary">Leads</a>
             </div>
         </div>
 
         @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
+            <div class="alert alert-success alert-dismissible fade show" role="alert" id="flash-success">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+
+            @push('scripts')
+                <script>
+                    setTimeout(() => {
+                        const el = document.getElementById('flash-success');
+                        if (!el) return;
+                        bootstrap.Alert.getOrCreateInstance(el).close();
+                    }, 3500);
+                </script>
+            @endpush
         @endif
 
+        @if (session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert" id="flash-error">
+                {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+
+            @push('scripts')
+                <script>
+                    setTimeout(() => {
+                        const el = document.getElementById('flash-error');
+                        if (!el) return;
+                        bootstrap.Alert.getOrCreateInstance(el).close();
+                    }, 4000);
+                </script>
+            @endpush
+        @endif
+
+        {{-- Filters --}}
         <div class="card mb-3">
             <div class="card-body">
-                <form method="GET" class="row g-2 align-items-end">
+                <form method="GET" class="row g-2 align-items-end" id="activitiesFilterForm">
+
                     <div class="col-12 col-md-4">
                         <label class="form-label">Search</label>
-                        <input class="form-control" name="q" value="{{ $q }}"
+                        <input class="form-control" id="qInput" name="q" value="{{ $q ?? '' }}"
                             placeholder="Title or notes...">
                     </div>
 
                     <div class="col-6 col-md-2">
                         <label class="form-label">Status</label>
-                        <select class="form-select" name="status">
-                            <option value="open" @selected($status === 'open')>Open</option>
-                            <option value="done" @selected($status === 'done')>Done</option>
-                            <option value="all" @selected($status === 'all')>All</option>
+                        <select class="form-select" name="status" onchange="this.form.submit()">
+                            <option value="open" @selected(($status ?? 'open') === 'open')>Open</option>
+                            <option value="done" @selected(($status ?? '') === 'done')>Done</option>
+                            <option value="all" @selected(($status ?? '') === 'all')>All</option>
                         </select>
                     </div>
 
                     <div class="col-6 col-md-2">
                         <label class="form-label">Scope</label>
-                        <select class="form-select" name="scope">
-                            <option value="" @selected(!$scope)>All</option>
-                            <option value="deal" @selected($scope === 'deal')>Deals</option>
-                            <option value="contact" @selected($scope === 'contact')>Leads</option>
+                        <select class="form-select" name="scope" onchange="this.form.submit()">
+                            <option value="" @selected(empty($scope))>All</option>
+                            <option value="deal" @selected(($scope ?? '') === 'deal')>Deals</option>
+                            <option value="contact" @selected(($scope ?? '') === 'contact')>Leads</option>
                         </select>
                     </div>
 
                     <div class="col-6 col-md-2">
                         <label class="form-label">Type</label>
-                        <select class="form-select" name="type">
-                            <option value="" @selected(!$type)>All</option>
-                            <option value="call" @selected($type === 'call')>Call</option>
-                            <option value="meeting" @selected($type === 'meeting')>Meeting</option>
-                            <option value="email" @selected($type === 'email')>Email</option>
-                            <option value="note" @selected($type === 'note')>Note</option>
+                        <select class="form-select" name="type" onchange="this.form.submit()">
+                            <option value="" @selected(empty($type))>All</option>
+                            <option value="call" @selected(($type ?? '') === 'call')>Call</option>
+                            <option value="meeting" @selected(($type ?? '') === 'meeting')>Meeting</option>
+                            <option value="email" @selected(($type ?? '') === 'email')>Email</option>
+                            <option value="note" @selected(($type ?? '') === 'note')>Note</option>
                         </select>
                     </div>
 
-                    {{-- ✅ Right side: Show all + buttons in one md column --}}
                     <div class="col-12 col-md-2">
                         <div class="d-flex flex-column gap-2">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="show_all" value="1"
-                                    id="showAll" @checked($showAll)>
+                                    id="showAll" @checked($showAll)
+                                    onchange="document.getElementById('activitiesFilterForm').submit()">
                                 <label class="form-check-label" for="showAll">Show all</label>
                             </div>
 
@@ -81,20 +133,52 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- Counter + clear filters --}}
+                    <div class="col-12">
+                        @php
+                            $hasQ = !empty(trim((string) ($q ?? '')));
+                            $hasType = !empty(trim((string) ($type ?? '')));
+                            $hasScope = !empty(trim((string) ($scope ?? '')));
+                            $hasShowAll = !empty($showAll);
+                            $hasStatus = ($status ?? 'open') !== 'open'; // since open is default
+                        @endphp
+
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div class="text-muted small">
+                                Showing <b>{{ $items->firstItem() ?? 0 }}</b>–<b>{{ $items->lastItem() ?? 0 }}</b>
+                                of <b>{{ $items->total() }}</b> activities
+                            </div>
+
+                            @if ($hasQ || $hasType || $hasScope || $hasShowAll || $hasStatus)
+                                <a class="small text-decoration-none"
+                                    href="{{ tenant_route('tenant.activities.followups') }}">
+                                    Clear filters
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+
                 </form>
             </div>
         </div>
 
+        {{-- Table --}}
         <div class="card">
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table table-hover table-sm align-middle mb-0">
                     <thead>
                         <tr>
-                            <th>Type</th>
-                            <th>Subject</th>
-                            <th>Title / Notes</th>
-                            <th>Due</th>
-                            <th>Owner</th>
+                            <x-index.th-sort label="Type" key="type" :sort="$sort" :dir="$dir"
+                                defaultDir="asc" />
+                            <x-index.th-sort label="Subject" key="subject_type" :sort="$sort" :dir="$dir"
+                                defaultDir="asc" />
+                            <x-index.th-sort label="Title / Notes" key="title" :sort="$sort" :dir="$dir"
+                                defaultDir="asc" />
+                            <x-index.th-sort label="Due" key="due_at" :sort="$sort" :dir="$dir"
+                                defaultDir="asc" />
+                            <x-index.th-sort label="Owner" key="owner" :sort="$sort" :dir="$dir"
+                                defaultDir="asc" />
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -211,3 +295,24 @@
 
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        // ✅ Debounced autosubmit for search (matches products/leads)
+        (function() {
+            const input = document.getElementById('qInput');
+            if (!input) return;
+
+            let t = null;
+            input.addEventListener('input', function() {
+                clearTimeout(t);
+                t = setTimeout(() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('q', input.value || '');
+                    url.searchParams.set('page', '1');
+                    window.location.href = url.toString();
+                }, 450);
+            });
+        })();
+    </script>
+@endpush

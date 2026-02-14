@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Schema;
 
 class QuoteController extends Controller
 {
+
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
@@ -25,12 +26,31 @@ class QuoteController extends Controller
         $status = $request->query('status');
         $sales_person_user_id = $request->query('sales_person_user_id');
 
-        $items = Quote::query()
+        // sorting
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // whitelist
+        $allowedSorts = [
+            'quote_number',
+            'status',
+            'subtotal',
+            'total',
+            'created_at',
+            'updated_at',
+            'company',        // relationship sort via subquery
+            'sales_person',   // relationship sort via subquery
+        ];
+        if (!in_array($sort, $allowedSorts, true)) {
+            $sort = 'updated_at';
+        }
+
+        $itemsQuery = Quote::query()
             ->where('tenant_id', $tenant->id)
             ->with(['deal', 'company', 'contact', 'salesPerson', 'owner'])
             ->when($status, fn ($qry) => $qry->where('status', $status))
             ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
-            ->when($q, function ($qry) use ($q) {
+            ->when($q !== '', function ($qry) use ($q) {
                 $qry->where(function ($x) use ($q) {
                     $x->where('quote_number', 'like', "%{$q}%")
                         ->orWhere('notes', 'like', "%{$q}%")
@@ -38,8 +58,26 @@ class QuoteController extends Controller
                         ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
                         ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
                 });
-            })
-            ->orderByDesc('updated_at')
+            });
+
+        // Apply sorting
+        $itemsQuery = match ($sort) {
+            'company' => $itemsQuery->orderBy(
+                \App\Models\Company::select('name')
+                    ->whereColumn('companies.id', 'quotes.company_id'),
+                $dir
+            ),
+            'sales_person' => $itemsQuery->orderBy(
+                \App\Models\User::select('name')
+                    ->whereColumn('users.id', 'quotes.sales_person_user_id'),
+                $dir
+            ),
+            default => $itemsQuery->orderBy($sort, $dir),
+        };
+
+        // Stable secondary sort
+        $items = $itemsQuery
+            ->orderByDesc('id')
             ->paginate(15)
             ->withQueryString();
 
@@ -48,15 +86,22 @@ class QuoteController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
+        // Pro-only export feature flag (adjust key to your actual feature name)
+        $canExport = tenant_feature($tenant, 'exports_excel');
+
         return view('tenant.quotes.index', compact(
             'tenant',
             'items',
             'salesPeople',
             'q',
             'status',
-            'sales_person_user_id'
+            'sales_person_user_id',
+            'sort',
+            'dir',
+            'canExport'
         ));
     }
+
 
     public function create(Request $request, string $tenantKey)
     {
@@ -924,5 +969,59 @@ class QuoteController extends Controller
 
         return 'INV-' . str_pad((string) $next, 6, '0', STR_PAD_LEFT);
     }
+
+    public function export(string $tenantKey, Request $request)
+    {
+        $tenant = app('tenant');
+
+        if (!tenant_feature($tenant, 'export')) {
+            return back()->with('error', 'Export to Excel is available on the Pro plan.');
+        }
+
+        // Reuse the same filters the index uses
+        $q = trim((string) $request->query('q', ''));
+        $status = $request->query('status');
+        $sales_person_user_id = $request->query('sales_person_user_id');
+
+        $rows = Quote::query()
+            ->where('tenant_id', $tenant->id)
+            ->with(['company','contact','salesPerson'])
+            ->when($status, fn ($qry) => $qry->where('status', $status))
+            ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
+            ->when($q !== '', function ($qry) use ($q) {
+                $qry->where(function ($x) use ($q) {
+                    $x->where('quote_number', 'like', "%{$q}%")
+                    ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
+                    ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                });
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        $filename = 'quotes-' . now()->format('Ymd-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Quote #','Company','Contact','Status','Subtotal','Total','Quoted Date','Sales Person']);
+
+            foreach ($rows as $qte) {
+                fputcsv($out, [
+                    $qte->quote_number,
+                    $qte->company?->name,
+                    $qte->contact?->name,
+                    $qte->status,
+                    number_format((float)$qte->subtotal, 2, '.', ''),
+                    number_format((float)$qte->total, 2, '.', ''),
+                    optional($qte->created_at)->format('Y-m-d'),
+                    $qte->salesPerson?->name,
+                ]);
+            }
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+
 
 }

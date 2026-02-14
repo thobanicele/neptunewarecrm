@@ -8,7 +8,6 @@
                 <div class="text-muted small">Tenant: {{ $tenant->name }} ({{ $tenant->subdomain }})</div>
             </div>
         </div>
-
         <div class="card mb-3">
             <div class="card-body">
                 <form class="row g-2 align-items-end" method="GET" action="{{ tenant_route('tenant.reports.statement') }}">

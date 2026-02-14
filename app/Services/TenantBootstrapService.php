@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\Pipeline;
 use App\Models\PipelineStage;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 
 class TenantBootstrapService
 {
@@ -35,5 +38,38 @@ class TenantBootstrapService
             ]);
         }
     }
+
+    public function seedRolesForTenant(int $tenantId): void
+    {
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenantId);
+
+        $rolesConfig = config('tenant_roles.roles', []);
+
+        // Create permissions (global list)
+        $perms = collect($rolesConfig)
+            ->flatten()
+            ->unique()
+            ->reject(fn ($p) => $p === '*');
+
+        foreach ($perms as $perm) {
+            Permission::findOrCreate($perm, 'web');
+        }
+
+        foreach ($rolesConfig as $roleName => $rolePerms) {
+            $role = Role::firstOrCreate([
+                'tenant_id'   => $tenantId,
+                'name'        => $roleName,
+                'guard_name'  => 'web',
+            ]);
+
+            if (in_array('*', $rolePerms, true)) {
+                $role->syncPermissions(Permission::all());
+            } else {
+                $role->syncPermissions($rolePerms);
+            }
+        }
+    }
+
+
 }
 

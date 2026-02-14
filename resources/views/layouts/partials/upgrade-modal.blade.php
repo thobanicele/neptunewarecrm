@@ -26,3 +26,43 @@
         </div>
     </div>
 </div>
+<script>
+    window.NW_showUpgradeModal = function(text, ctaText, ctaHref) {
+        const modalEl = document.getElementById('upgradeModal');
+        if (!modalEl) return;
+
+        const textEl = document.getElementById('upgradeText');
+        const ctaEl = document.getElementById('upgradeCta');
+
+        if (textEl && text) textEl.textContent = text;
+
+        if (ctaEl) {
+            if (ctaText) ctaEl.textContent = ctaText;
+            if (ctaHref) ctaEl.setAttribute('href', ctaHref);
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const ctaEl = document.getElementById('upgradeCta');
+        if (ctaEl) {
+            window.NW_UPGRADE_DEFAULT_HREF = ctaEl.getAttribute('href') || '#';
+            window.NW_UPGRADE_DEFAULT_TEXT = ctaEl.textContent || 'Upgrade to Premium';
+        }
+    });
+
+    document.addEventListener('hidden.bs.modal', function(e) {
+        if (e.target?.id !== 'upgradeModal') return;
+
+        const textEl = document.getElementById('upgradeText');
+        if (textEl) textEl.textContent = 'This feature is available on the Premium plan.';
+
+        const ctaEl = document.getElementById('upgradeCta');
+        if (ctaEl) {
+            ctaEl.textContent = window.NW_UPGRADE_DEFAULT_TEXT || 'Upgrade to Premium';
+            ctaEl.setAttribute('href', window.NW_UPGRADE_DEFAULT_HREF || '#');
+        }
+    });
+</script>

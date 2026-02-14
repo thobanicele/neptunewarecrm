@@ -7,22 +7,65 @@ use App\Models\Contact;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Database\QueryException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends Controller
 {
-    public function index()
+    public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
 
-        $contacts = Contact::query()
+        $q = trim((string) $request->query('q', ''));
+        $stage = (string) $request->query('stage', '');
+
+        // sorting
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        // allow only safe sorts (some are contact fields, some are joined/display-only)
+        $allowedSorts = ['name','email','phone','lifecycle_stage','updated_at','created_at','company'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'updated_at';
+
+        $query = Contact::query()
             ->where('tenant_id', $tenant->id)
             ->where('lifecycle_stage', '!=', 'lead')
             ->with('company')
-            ->latest('updated_at')
+            ->when($stage !== '', fn($qq) => $qq->where('lifecycle_stage', $stage))
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%")
+                    ->orWhereHas('company', fn($c) => $c->where('name', 'like', "%{$q}%"));
+                });
+            });
+
+        // sorting logic
+        if ($sort === 'company') {
+            // sort by related company name (left join)
+            $query->leftJoin('companies', function ($join) use ($tenant) {
+                    $join->on('companies.id', '=', 'contacts.company_id')
+                        ->where('companies.tenant_id', '=', $tenant->id);
+                })
+                ->select('contacts.*')
+                ->orderBy('companies.name', $dir);
+        } else {
+            $query->orderBy($sort, $dir);
+        }
+
+        $contacts = $query
+            ->orderByDesc('contacts.id')
             ->paginate(20)
             ->withQueryString();
 
-        return view('tenant.contacts.index', compact('contacts'));
+        // stage options (use your own if you have a helper)
+        $stages = ['contact','customer','vendor','partner','other'];
+
+        $canExport = tenant_feature($tenant, 'export');
+
+        return view('tenant.contacts.index', compact(
+            'tenant','contacts','q','stage','sort','dir','stages','canExport'
+        ));
     }
 
     public function create()
@@ -175,6 +218,77 @@ class ContactController extends Controller
         return redirect()->to(tenant_route('tenant.contacts.index'))
             ->with('success', 'Contact deleted.');
     }
+
+    public function export(string $tenantKey, Request $request): StreamedResponse
+    {
+        $tenant = app('tenant');
+
+        if (!tenant_feature($tenant, 'export')) {
+            return back()->with('error', 'Export to Excel is available on the Premium plan.');
+        }
+
+        $q = trim((string) $request->query('q', ''));
+        $stage = (string) $request->query('stage', '');
+
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = ['name','email','phone','lifecycle_stage','updated_at','created_at','company'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'updated_at';
+
+        $query = Contact::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('lifecycle_stage', '!=', 'lead')
+            ->with('company')
+            ->when($stage !== '', fn($qq) => $qq->where('lifecycle_stage', $stage))
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%")
+                    ->orWhereHas('company', fn($c) => $c->where('name', 'like', "%{$q}%"));
+                });
+            });
+
+        if ($sort === 'company') {
+            $query->leftJoin('companies', function ($join) use ($tenant) {
+                    $join->on('companies.id', '=', 'contacts.company_id')
+                        ->where('companies.tenant_id', '=', $tenant->id);
+                })
+                ->select('contacts.*')
+                ->orderBy('companies.name', $dir);
+        } else {
+            $query->orderBy($sort, $dir);
+        }
+
+        $rows = $query
+            ->orderByDesc('contacts.id')
+            ->get(['contacts.id','contacts.name','contacts.email','contacts.phone','contacts.lifecycle_stage','contacts.company_id','contacts.created_at','contacts.updated_at']);
+
+        $filename = 'contacts-' . now()->format('Ymd-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+
+            fputcsv($out, ['Name','Email','Phone','Company','Stage','Created','Updated']);
+
+            foreach ($rows as $c) {
+                $c->loadMissing('company');
+                fputcsv($out, [
+                    $c->name,
+                    $c->email,
+                    $c->phone,
+                    $c->company?->name,
+                    $c->lifecycle_stage,
+                    optional($c->created_at)->format('Y-m-d H:i'),
+                    optional($c->updated_at)->format('Y-m-d H:i'),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
 
 }
 

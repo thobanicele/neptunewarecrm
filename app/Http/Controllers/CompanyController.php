@@ -11,14 +11,58 @@ use Illuminate\Validation\Rule;
 use App\Models\Contact;
 use App\Models\User;
 use App\Models\TaxType;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CompanyController extends Controller
 {
-    public function index()
+    public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
-        $companies = Company::where('tenant_id', $tenant->id)->latest()->paginate(20);
-        return view('tenant.companies.index', compact('companies'));
+       
+
+        $q = trim((string) $request->query('q', ''));
+
+        // filters
+        $type = (string) $request->query('type', ''); // customer | supplier | ...
+
+        // sorting
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = ['name','type','email','phone','updated_at','created_at'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'updated_at';
+
+        $query = Company::query()
+            ->where('tenant_id', $tenant->id)
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
+                });
+            })
+            ->when($type !== '', fn($qq) => $qq->where('type', $type))
+            ->orderBy($sort, $dir)
+            ->orderByDesc('id');
+
+        $companies = $query
+            ->paginate(20)
+            ->withQueryString();
+
+        // dropdown options for type filter (from existing data)
+        $types = Company::query()
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('type')
+            ->where('type', '<>', '')
+            ->distinct()
+            ->orderBy('type')
+            ->pluck('type');
+
+        $canExport = tenant_feature($tenant, 'export');
+
+        return view('tenant.companies.index', compact(
+            'tenant','companies','q','type','types','sort','dir','canExport'
+        ));
     }
 
     public function create()
@@ -355,6 +399,59 @@ class CompanyController extends Controller
                     ->update(['is_default_shipping' => 0]);
             }
         }
+    }
+
+    public function export(string $tenantKey, Request $request): StreamedResponse
+    {
+        $tenant = app('tenant');
+
+        if (!tenant_feature($tenant, 'export')) {
+            return back()->with('error', 'Export to Excel is available on the Premium plan.');
+        }
+
+        $q = trim((string) $request->query('q', ''));
+        $type = (string) $request->query('type', '');
+
+        $sort = (string) $request->query('sort', 'updated_at');
+        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $allowedSorts = ['name','type','email','phone','updated_at','created_at'];
+        if (!in_array($sort, $allowedSorts, true)) $sort = 'updated_at';
+
+        $rows = Company::query()
+            ->where('tenant_id', $tenant->id)
+            ->when($q !== '', function ($qq) use ($q) {
+                $qq->where(function ($w) use ($q) {
+                    $w->where('name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
+                });
+            })
+            ->when($type !== '', fn($qq) => $qq->where('type', $type))
+            ->orderBy($sort, $dir)
+            ->orderByDesc('id')
+            ->get(['name','type','email','phone','created_at','updated_at']);
+
+        $filename = 'companies-' . now()->format('Ymd-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $out = fopen('php://output', 'w');
+
+            fputcsv($out, ['Name','Type','Email','Phone','Created','Updated']);
+
+            foreach ($rows as $c) {
+                fputcsv($out, [
+                    $c->name,
+                    $c->type,
+                    $c->email,
+                    $c->phone,
+                    optional($c->created_at)->format('Y-m-d H:i'),
+                    optional($c->updated_at)->format('Y-m-d H:i'),
+                ]);
+            }
+
+            fclose($out);
+        }, $filename, ['Content-Type' => 'text/csv']);
     }
     
 }

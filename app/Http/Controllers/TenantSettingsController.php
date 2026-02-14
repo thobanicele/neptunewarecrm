@@ -9,11 +9,17 @@ use Illuminate\Validation\Rule;
 
 class TenantSettingsController extends Controller
 {
-    public function edit(Tenant $tenant)
+    public function edit(string $tenantKey)
     {
-        // $tenant is route-bound by {tenant:subdomain}
-        return view('tenant.settings.edit', compact('tenant'));
+        $tenant = app('tenant');
+
+        $sub = \App\Models\Subscription::where('tenant_id', $tenant->id)->latest()->first();
+
+        $trialDaysLeft = $sub?->trial_ends_at ? max(0, now()->diffInDays($sub->trial_ends_at, false)) : null;
+
+        return view('tenant.settings.index', compact('tenant', 'sub', 'trialDaysLeft'));
     }
+
 
     public function update(Request $request, Tenant $tenant)
     {

@@ -45,6 +45,15 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
+        if (session()->has('invite_token')) {
+            $token = session('invite_token');
+
+            // clear session first (avoid loops)
+            session()->forget(['invite_token', 'invite_email']);
+
+            return redirect()->route('tenant.invites.accept', ['token' => $token]);
+        }
+
         return redirect()->route('app.home');
     }
 }

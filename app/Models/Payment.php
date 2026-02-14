@@ -5,9 +5,19 @@ use Illuminate\Database\Eloquent\Model;
 class Payment extends Model
 {
     protected $fillable = [
-        'tenant_id','company_id','contact_id','invoice_id','credit_note_id',
-        'reference','direction','amount','paid_at','method','notes',
-        ];
+    'tenant_id',
+    'company_id',
+    'contact_id',
+    'invoice_id', // ✅ add this
+    'paid_at',
+    'amount',
+    'method',
+    'reference',
+    'notes',
+    'created_by_user_id',
+    'credit_note_id',
+    ];
+
 
     protected $casts = [
         'paid_at' => 'date',
@@ -19,8 +29,7 @@ class Payment extends Model
 
     public function allocations()
     {
-        return $this->hasMany(TransactionAllocation::class, 'source_id')
-        ->where('source_type', self::class);
+        return $this->hasMany(TransactionAllocation::class, 'payment_id');
     }
 
     public function allocatedTotal(): float

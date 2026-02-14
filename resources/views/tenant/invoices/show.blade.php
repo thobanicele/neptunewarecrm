@@ -5,27 +5,30 @@
         $pill = fn($status) => match (strtolower((string) $status)) {
             'draft' => 'secondary',
             'issued' => 'warning',
-            'paid' => 'success',
             'void' => 'dark',
             default => 'light',
         };
 
-        $ribbonText = strtoupper((string) ($invoice->status ?? 'DRAFT'));
+        $ribbonText = strtoupper((string) ($invoice->paymentStatus ?? 'UNPAID'));
 
         // Use invoice header totals (these already include discount logic from your backend)
         $subGross = round((float) ($invoice->subtotal ?? 0), 2); // "gross subtotal"
         $discount = round((float) ($invoice->discount_amount ?? 0), 2);
         $vat = round((float) ($invoice->tax_amount ?? 0), 2);
-        $grand = round((float) ($invoice->total ?? (($subGross - $discount) + $vat)), 2);
+        $grand = round((float) ($invoice->total ?? $subGross - $discount + $vat), 2);
 
         // For table rows we compute incl = line_total + tax_amount (line_total is NET excl vat)
         $currencySymbol = $invoice->currency === 'ZAR' || empty($invoice->currency) ? 'R' : $invoice->currency;
         $money = fn($n) => $currencySymbol . ' ' . number_format((float) $n, 2);
 
         $fmtDate = function ($d) {
-            if (!$d) return '—';
+            if (!$d) {
+                return '—';
+            }
             try {
-                return $d instanceof \Carbon\CarbonInterface ? $d->format('d/m/Y') : \Carbon\Carbon::parse($d)->format('d/m/Y');
+                return $d instanceof \Carbon\CarbonInterface
+                    ? $d->format('d/m/Y')
+                    : \Carbon\Carbon::parse($d)->format('d/m/Y');
             } catch (\Throwable $e) {
                 return (string) $d;
             }
@@ -38,11 +41,19 @@
             background: #fff;
             border: 1px solid rgba(0, 0, 0, .08);
             border-radius: 12px;
-            padding: 28px 22px 22px 70px; /* space for ribbon */
+            padding: 28px 22px 22px 70px;
+            /* space for ribbon */
             position: relative;
         }
-        .nw-muted { color: #6c757d; }
-        .nw-hr { border-top: 1px solid rgba(0, 0, 0, .08); margin: 16px 0; }
+
+        .nw-muted {
+            color: #6c757d;
+        }
+
+        .nw-hr {
+            border-top: 1px solid rgba(0, 0, 0, .08);
+            margin: 16px 0;
+        }
 
         /* --- Status ribbon --- */
         .nw-ribbon {
@@ -55,6 +66,7 @@
             pointer-events: none;
             z-index: 2;
         }
+
         .nw-ribbon span {
             position: absolute;
             display: block;
@@ -70,10 +82,22 @@
             left: -52px;
             letter-spacing: .5px;
         }
-        .nw-ribbon.draft span { background: #6c757d; }
-        .nw-ribbon.issued span { background: #f0ad4e; }
-        .nw-ribbon.paid span { background: #198754; }
-        .nw-ribbon.void span { background: #212529; }
+
+        .nw-ribbon.draft span {
+            background: #6c757d;
+        }
+
+        .nw-ribbon.issued span {
+            background: #f0ad4e;
+        }
+
+        .nw-ribbon.paid span {
+            background: #198754;
+        }
+
+        .nw-ribbon.void span {
+            background: #212529;
+        }
 
         /* --- Header --- */
         .nw-header {
@@ -82,11 +106,33 @@
             gap: 16px;
             align-items: flex-start;
         }
-        .nw-brand { display: flex; gap: 14px; align-items: flex-start; }
-        .nw-logo { height: 64px; width: auto; object-fit: contain; }
-        .nw-title { text-align: right; }
-        .nw-title h1 { margin: 0; font-size: 32px; letter-spacing: .2px; }
-        .nw-title .nw-quote-no { margin-top: 6px; font-weight: 700; }
+
+        .nw-brand {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .nw-logo {
+            height: 64px;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .nw-title {
+            text-align: right;
+        }
+
+        .nw-title h1 {
+            margin: 0;
+            font-size: 32px;
+            letter-spacing: .2px;
+        }
+
+        .nw-title .nw-quote-no {
+            margin-top: 6px;
+            font-weight: 700;
+        }
 
         .nw-meta {
             display: grid;
@@ -96,7 +142,10 @@
             font-size: 13px;
             justify-content: end;
         }
-        .nw-meta div:nth-child(odd) { color: #6c757d; }
+
+        .nw-meta div:nth-child(odd) {
+            color: #6c757d;
+        }
 
         /* --- Parties --- */
         .nw-parties {
@@ -105,11 +154,13 @@
             gap: 18px;
             margin-top: 18px;
         }
+
         .nw-box {
             border: 1px solid rgba(0, 0, 0, .08);
             border-radius: 10px;
             padding: 14px;
         }
+
         .nw-box h6 {
             margin: 0 0 10px 0;
             font-weight: 700;
@@ -125,6 +176,7 @@
             border-collapse: collapse;
             margin-top: 18px;
         }
+
         .nw-table th {
             background: #1f2937;
             color: #fff;
@@ -134,22 +186,54 @@
             letter-spacing: .4px;
             padding: 10px;
         }
+
         .nw-table td {
             border-bottom: 1px solid rgba(0, 0, 0, .08);
             padding: 12px 10px;
             vertical-align: top;
             font-size: 13px;
         }
-        .nw-right { text-align: right; }
-        .nw-item-sku { display: block; color: #6c757d; font-size: 12px; margin-top: 4px; }
+
+        .nw-right {
+            text-align: right;
+        }
+
+        .nw-item-sku {
+            display: block;
+            color: #6c757d;
+            font-size: 12px;
+            margin-top: 4px;
+        }
 
         /* --- Totals --- */
-        .nw-totals-wrap { display: flex; justify-content: flex-end; margin-top: 14px; }
-        .nw-totals { width: 360px; border-collapse: collapse; }
-        .nw-totals td { padding: 10px 8px; font-size: 13px; }
-        .nw-totals .label { color: #6c757d; }
-        .nw-totals .strong { font-weight: 800; }
-        .nw-totals .total-row td { background: #f3f4f6; font-weight: 900; }
+        .nw-totals-wrap {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 14px;
+        }
+
+        .nw-totals {
+            width: 360px;
+            border-collapse: collapse;
+        }
+
+        .nw-totals td {
+            padding: 10px 8px;
+            font-size: 13px;
+        }
+
+        .nw-totals .label {
+            color: #6c757d;
+        }
+
+        .nw-totals .strong {
+            font-weight: 800;
+        }
+
+        .nw-totals .total-row td {
+            background: #f3f4f6;
+            font-weight: 900;
+        }
 
         /* --- Footer blocks --- */
         .nw-footer-grid {
@@ -158,7 +242,10 @@
             gap: 18px;
             margin-top: 22px;
         }
-        .nw-pre { white-space: pre-wrap; }
+
+        .nw-pre {
+            white-space: pre-wrap;
+        }
     </style>
 
     <div class="container-fluid py-4">
@@ -199,7 +286,8 @@
                 @endif
 
                 @if ($invoice->status === 'issued' && tenant_feature(app('tenant'), 'invoice_email_send'))
-                    <form method="POST" action="{{ tenant_route('tenant.invoices.markPaid', $invoice) }}" class="d-inline">
+                    <form method="POST" action="{{ tenant_route('tenant.invoices.markPaid', $invoice) }}"
+                        class="d-inline">
                         @csrf
                         <button class="btn btn-outline-success">Mark Paid</button>
                     </form>
@@ -217,7 +305,7 @@
         <div class="nw-paper">
 
             {{-- Ribbon --}}
-            <div class="nw-ribbon {{ strtolower((string) $invoice->status) }}">
+            <div class="nw-ribbon {{ strtolower((string) $invoice->paymentStatus) }}">
                 <span>{{ $ribbonText }}</span>
             </div>
 
@@ -336,8 +424,8 @@
                 <tbody>
                     @foreach ($invoice->items as $idx => $it)
                         @php
-                            $line = (float) ($it->line_total ?? 0);     // excl VAT (net)
-                            $lineVat = (float) ($it->tax_amount ?? 0);  // VAT
+                            $line = (float) ($it->line_total ?? 0); // excl VAT (net)
+                            $lineVat = (float) ($it->tax_amount ?? 0); // VAT
                             $incl = $line + $lineVat;
                         @endphp
                         <tr>
@@ -371,16 +459,33 @@
             </table>
 
             {{-- Totals --}}
+            @php
+                // Prefer combined value passed from controller, fallback to paid+credit
+                $paid = round((float) ($paymentsApplied ?? 0), 2);
+                $credit = round((float) ($creditsApplied ?? 0), 2);
+
+                $appliedTotal = isset($paymentsAndCredits)
+                    ? round((float) $paymentsAndCredits, 2)
+                    : round($paid + $credit, 2);
+
+                // Use controller balanceDue if present (already tolerance-safe)
+                $bal = isset($balanceDue) ? round((float) $balanceDue, 2) : round((float) $grand - $appliedTotal, 2);
+
+                if ($bal < 0) {
+                    $bal = 0;
+                }
+
+                // Display label: option A (unpaid / partially_paid / paid)
+                // If you passed $paymentStatus from controller, use it; else derive it.
+                $displayStatus =
+                    $paymentStatus ?? ($appliedTotal <= 0 ? 'unpaid' : ($isPaid ?? false ? 'paid' : 'partially_paid'));
+            @endphp
+
             <div class="nw-totals-wrap">
                 <table class="nw-totals">
                     <tr>
-                        <td class="label nw-right">Sub Total (gross)</td>
+                        <td class="label nw-right">Sub Total</td>
                         <td class="nw-right strong">{{ $money($subGross) }}</td>
-                    </tr>
-
-                    <tr>
-                        <td class="label nw-right">Discount</td>
-                        <td class="nw-right strong">- {{ $money($discount) }}</td>
                     </tr>
 
                     <tr>
@@ -397,6 +502,26 @@
                     <tr class="total-row">
                         <td class="nw-right">Total</td>
                         <td class="nw-right">{{ $money($grand) }}</td>
+                    </tr>
+
+                    {{-- ✅ Combined Payments/Credits (negative red) --}}
+                    @if ($appliedTotal > 0)
+                        <tr>
+                            <td class="label nw-right">Payments / Credits</td>
+                            <td class="nw-right strong text-danger">
+                                - {{ $money($appliedTotal) }}
+                            </td>
+                        </tr>
+                    @endif
+
+                    {{-- ✅ Balance Due --}}
+                    <tr class="total-row">
+                        <td class="nw-right">
+                            Balance Due
+                        </td>
+                        <td class="nw-right {{ $bal > 0 ? '' : 'text-success' }}">
+                            {{ $money($bal) }}
+                        </td>
                     </tr>
                 </table>
             </div>
@@ -450,4 +575,3 @@
         </div>
     </div>
 @endsection
-

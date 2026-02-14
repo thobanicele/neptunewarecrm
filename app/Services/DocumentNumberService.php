@@ -13,8 +13,13 @@ class DocumentNumberService
      *
      * Uses tenant_counters table with UNIQUE(tenant_id, key) and row locking.
      */
-    public function next(int $tenantId, string $key, string $prefix, int $pad = 6, bool $includeYear = false): string
-    {
+    public function next(
+        int $tenantId,
+        string $key,
+        string $prefix,
+        int $pad = 6,
+        bool $includeYear = false
+    ): string {
         $nextValue = DB::transaction(function () use ($tenantId, $key) {
 
             // 1) Ensure the counter row exists (race-safe via UNIQUE constraint)
@@ -40,19 +45,24 @@ class DocumentNumberService
             return (int) $counter->value;
         });
 
-        // Build number
-        $number = $prefix . '-' . str_pad((string) $nextValue, $pad, '0', STR_PAD_LEFT);
+        $padded = str_pad((string) $nextValue, $pad, '0', STR_PAD_LEFT);
 
-        if ($includeYear) {
-            $year = now()->format('Y');
-            $number = $prefix . '-' . $year . '-' . str_pad((string) $nextValue, $pad, '0', STR_PAD_LEFT);
+        // ✅ If prefix is empty, return just the padded number (e.g. 00001)
+        if ($prefix === '') {
+            return $padded;
         }
 
-        return $number;
+        // With prefix
+        if ($includeYear) {
+            $year = now()->format('Y');
+            return $prefix . '-' . $year . '-' . $padded;
+        }
+
+        return $prefix . '-' . $padded;
     }
 
     /**
-     * ✅ Invoice numbers WITHOUT year:
+     * Invoice numbers WITHOUT year:
      * Example: INV-000001
      */
     public function nextInvoiceNumber(int $tenantId): string
@@ -61,12 +71,22 @@ class DocumentNumberService
     }
 
     /**
-     * Quote numbers (choose what you want).
-     * If you want: QUO-000001
+     * Quote numbers WITHOUT year:
+     * Example: QUO-00001
      */
     public function nextQuoteNumber(int $tenantId): string
     {
         return $this->next($tenantId, 'quote', 'QUO', 5, false);
     }
+
+    /**
+     * ✅ Credit Note numbers WITHOUT year and WITHOUT prefix:
+     * Example: 00001
+     */
+    public function nextCreditNoteNumber(int $tenantId): string
+    {
+        return $this->next($tenantId, 'credit_note', 'CN', 5, false);
+    }
 }
+
 

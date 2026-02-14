@@ -257,15 +257,20 @@
                 <a href="{{ tenant_route('tenant.quotes.index') }}" class="btn btn-light">Back</a>
                 <a href="{{ tenant_route('tenant.quotes.edit', ['quote' => $quote->id]) }}"
                     class="btn btn-outline-secondary">Edit</a>
-                @if (strtolower((string) $quote->status) === 'accepted' && tenant_feature(app('tenant'), 'invoicing_convert_from_quote'))
-                    <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}"
-                        class="d-inline">
+                @if (tenant_feature($tenant, 'invoicing_convert_from_quote'))
+                    <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}">
                         @csrf
-                        <button class="btn btn-success">
-                            Convert to Invoice
-                        </button>
+                        <button class="btn btn-primary">Convert to Invoice</button>
                     </form>
+                @else
+                    <a href="#" class="btn btn-outline-primary" data-upgrade-modal
+                        data-upgrade-text="Quote → Invoice conversion is available on the Premium plan."
+                        data-upgrade-cta="Upgrade to Premium"
+                        data-upgrade-href="{{ tenant_route('tenant.billing.upgrade') }}">
+                        Convert to Invoice <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                    </a>
                 @endif
+
 
                 <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
                     class="btn btn-outline-primary">PDF</a>

@@ -39,12 +39,6 @@
         </li>
 
         <li class="sidebar-item">
-            <a class="sidebar-link" href="{{ tenant_route('tenant.deals.kanban') }}">
-                <i class="align-middle" data-feather="columns"></i> <span class="align-middle">Deals Kanban</span>
-            </a>
-        </li>
-
-        <li class="sidebar-item">
             <a class="sidebar-link" href="{{ tenant_route('tenant.products.index') }}">
                 <i class="align-middle" data-feather="shopping-bag"></i> <span class="align-middle">Products</span>
             </a>
@@ -57,17 +51,17 @@
         </li>
         <li class="sidebar-item">
             <a class="sidebar-link" href="{{ tenant_route('tenant.invoices.index') }}">
-                <i class="align-middle" data-feather="file-text"></i> <span class="align-middle">Invoices</span>
+                <i class="align-middle" data-feather="file-plus"></i> <span class="align-middle">Invoices</span>
             </a>
         </li>
         <li class="sidebar-item">
-            <a class="sidebar-link" href="#">
-                <i class="align-middle" data-feather="file-text"></i> <span class="align-middle">Credit Notes</span>
+            <a class="sidebar-link" href="{{ tenant_route('tenant.credit-notes.index') }}">
+                <i class="align-middle" data-feather="file-minus"></i> <span class="align-middle">Credit Notes</span>
             </a>
         </li>
         <li class="sidebar-item">
-            <a class="sidebar-link" href="#">
-                <i class="align-middle" data-feather="dollar-sign"></i> <span class="align-middle">Payments</span>
+            <a class="sidebar-link" href="{{ tenant_route('tenant.payments.index') }}">
+                <i class="align-middle" data-feather="credit-card"></i> <span class="align-middle">Payments</span>
             </a>
         </li>
         <li class="sidebar-item">

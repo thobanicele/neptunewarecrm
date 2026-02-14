@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'paystack' => [
+        'public'  => env('PAYSTACK_PUBLIC_KEY'),
+        'secret'  => env('PAYSTACK_SECRET_KEY'),
+        'webhook' => env('PAYSTACK_WEBHOOK_SECRET'), // optional (we can use secret for signature verify)
+    ],
+
 ];

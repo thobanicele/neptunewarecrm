@@ -70,14 +70,14 @@
 
                         <li>
                             <a class="dropdown-item"
-                                href="{{ tenant_route('payments.create') . '?company_id=' . $company->id }}">
+                                href="{{ tenant_route('tenant.payments.create') . '?company_id=' . $company->id }}">
                                 Record Payment
                             </a>
                         </li>
 
                         <li>
                             <a class="dropdown-item"
-                                href="{{ tenant_route('credit-notes.create') . '?company_id=' . $company->id }}">
+                                href="{{ tenant_route('tenant.credit-notes.create') . '?company_id=' . $company->id }}">
                                 New Credit Note
                             </a>
                         </li>

@@ -5,9 +5,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class CreditNote extends Model
 {
-    protected $fillable = [
-        'tenant_id','company_id','invoice_id',
-        'credit_note_number','issued_at','amount','reason','notes',
+   protected $fillable = [
+        'tenant_id',
+        'company_id',
+        'contact_id',
+        'invoice_id',
+        'credit_note_number',
+        'issued_at',
+        'amount',
+        'reason',
+        'notes',
+        'created_by_user_id',
     ];
 
     protected $casts = [
@@ -15,10 +23,25 @@ class CreditNote extends Model
         'amount'    => 'decimal:2',
     ];
 
-    public function company() { return $this->belongsTo(Company::class); }
-    public function invoice() { return $this->belongsTo(Invoice::class); }
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 
-    // CreditNote.php
+    public function contact()
+    {
+        return $this->belongsTo(Contact::class);
+    }
+
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class);
+    }
+
+    public function items()
+    {
+        return $this->hasMany(CreditNoteItem::class);
+    }
 
     public function allocations()
     {
@@ -42,8 +65,7 @@ class CreditNote extends Model
 
     public function availableTotal(): float
     {
-        // credit remaining that can still be used or refunded
-        return max(0, (float) $this->total - $this->allocatedTotal() - $this->refundedTotal());
+        return max(0, (float) $this->amount - $this->allocatedTotal() - $this->refundedTotal());
     }
 
 }

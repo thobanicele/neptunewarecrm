@@ -42,15 +42,19 @@ if (! function_exists('tenant_route')) {
 if (! function_exists('tenant_feature')) {
     function tenant_feature(?Tenant $tenant, string $feature, bool $default = false): bool
     {
-        // Config-driven plan features
-        return TenantPlan::feature($tenant?->plan, $feature, $default);
+        if (! $tenant) return $default;
+
+        // ✅ Trial/subscription-aware
+        return TenantPlan::feature($tenant, $feature, $default);
     }
 }
 
 if (! function_exists('tenant_limit')) {
-    function tenant_limit(?\App\Models\Tenant $tenant, string $path, $default = null)
+    function tenant_limit(?Tenant $tenant, string $path, $default = null)
     {
-        return \App\Support\TenantPlan::limit($tenant?->plan, $path, $default);
+        if (! $tenant) return $default;
+
+        return TenantPlan::limit($tenant, $path, $default);
     }
 }
 

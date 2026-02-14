@@ -2,13 +2,18 @@
 
 namespace App\Support;
 
+use App\Models\Subscription;
+use App\Models\Tenant;
+
 class TenantPlan
 {
+    /**
+     * Resolve a plan key safely from a raw plan string.
+     */
     public static function resolve(?string $plan): string
     {
         $plan = $plan ?: config('plans.default_plan', 'free');
 
-        // safety: if unknown plan stored in DB, fall back
         if (!array_key_exists($plan, config('plans.plans', []))) {
             $plan = config('plans.default_plan', 'free');
         }
@@ -16,9 +21,53 @@ class TenantPlan
         return $plan;
     }
 
-    public static function feature(?string $plan, string $feature, bool $default = false): bool
+    /**
+     * Trial/Subscription-aware plan for a given tenant.
+     * This is the key fix that unlocks premium features during trial.
+     */
+    public static function effectivePlan(Tenant $tenant): string
     {
-        $plan = self::resolve($plan);
+        $base = self::resolve($tenant->plan);
+
+        $sub = Subscription::query()
+            ->where('tenant_id', $tenant->id)
+            ->latest()
+            ->first();
+
+        if (!$sub) return $base;
+
+        // Cancelled => fall back
+        if (!is_null($sub->canceled_at)) return $base;
+
+        // Trialing premium => premium
+        if (
+            ($sub->plan === 'premium') &&
+            $sub->trial_ends_at &&
+            now()->lt($sub->trial_ends_at)
+        ) {
+            return 'premium';
+        }
+
+        // Active premium => premium (choose your condition)
+        if ($sub->plan === 'premium') {
+            if ($sub->expires_at && now()->lt($sub->expires_at)) return 'premium';
+            if (!empty($sub->paystack_subscription_code)) return 'premium';
+        }
+
+        return $base;
+    }
+
+    /**
+     * Feature check.
+     * Accepts either:
+     *  - a plan string
+     *  - a Tenant instance (recommended)
+     */
+    public static function feature(string|Tenant|null $planOrTenant, string $feature, bool $default = false): bool
+    {
+        $plan = $planOrTenant instanceof Tenant
+            ? self::effectivePlan($planOrTenant)
+            : self::resolve($planOrTenant);
 
         return (bool) data_get(
             config("plans.plans.$plan.features", []),
@@ -27,9 +76,14 @@ class TenantPlan
         );
     }
 
-    public static function limit(?string $plan, string $path, $default = null)
+    /**
+     * Limits check (same dual-accept behavior as feature()).
+     */
+    public static function limit(string|Tenant|null $planOrTenant, string $path, $default = null)
     {
-        $plan = self::resolve($plan);
+        $plan = $planOrTenant instanceof Tenant
+            ? self::effectivePlan($planOrTenant)
+            : self::resolve($planOrTenant);
 
         return data_get(
             config("plans.plans.$plan", []),
@@ -38,6 +92,7 @@ class TenantPlan
         );
     }
 }
+
 
 
 

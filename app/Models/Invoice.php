@@ -105,6 +105,28 @@ class Invoice extends Model
 
 
 
+    public function getAllocatedAmountAttribute(): float
+    {
+        // If eager-loaded, this avoids extra queries
+        $sum = $this->relationLoaded('allocations')
+            ? $this->allocations->sum('amount_applied')
+            : $this->allocations()->sum('amount_applied');
+
+        return round((float) $sum, 2);
+    }
+
+    public function getOutstandingAmountAttribute(): float
+    {
+        return round(((float) $this->total) - $this->allocated_amount, 2);
+    }
+
+    public function getPaymentStatusAttribute(): string
+    {
+        if ($this->outstanding_amount <= 0) return 'paid';
+        if ($this->allocated_amount > 0) return 'partial';
+        return 'unpaid';
+    }
+
 }
 
 
