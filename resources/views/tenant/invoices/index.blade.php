@@ -3,6 +3,7 @@
 @section('content')
     <div class="container-fluid py-4">
 
+        {{-- Header --}}
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h3 class="mb-0">Invoices</h3>
@@ -10,24 +11,29 @@
             </div>
 
             <div class="d-flex gap-2">
-                <a href="{{ tenant_route('tenant.invoices.create') }}" class="btn btn-primary">+ Add Invoice</a>
+                @can('create', \App\Models\Invoice::class)
+                    <a href="{{ tenant_route('tenant.invoices.create') }}" class="btn btn-primary">+ Add Invoice</a>
+                @endcan
 
                 @php $qs = http_build_query(request()->query()); @endphp
 
-                @if (tenant_feature($tenant, 'export'))
-                    <a href="{{ tenant_route('tenant.invoices.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
-                @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
-                @endif
+                @can('export', \App\Models\Invoice::class)
+                    @if ($canExport ?? tenant_feature($tenant, 'export'))
+                        <a href="{{ tenant_route('tenant.invoices.export') }}{{ $qs ? '?' . $qs : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @else
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endif
+                @endcan
             </div>
         </div>
 
+        {{-- Flash --}}
         @if (session('success'))
             <div class="alert alert-success alert-dismissible fade show" role="alert" id="flash-success">
                 {{ session('success') }}
@@ -39,8 +45,7 @@
                     setTimeout(() => {
                         const el = document.getElementById('flash-success');
                         if (!el) return;
-                        const alert = bootstrap.Alert.getOrCreateInstance(el);
-                        alert.close();
+                        bootstrap.Alert.getOrCreateInstance(el).close();
                     }, 3500);
                 </script>
             @endpush
@@ -57,8 +62,7 @@
                     setTimeout(() => {
                         const el = document.getElementById('flash-error');
                         if (!el) return;
-                        const alert = bootstrap.Alert.getOrCreateInstance(el);
-                        alert.close();
+                        bootstrap.Alert.getOrCreateInstance(el).close();
                     }, 4000);
                 </script>
             @endpush
@@ -134,7 +138,6 @@
 
         <div class="card">
             <div class="card-body pb-0">
-                {{-- Results summary --}}
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="text-muted small">
                         Showing <b>{{ $invoices->firstItem() ?? 0 }}</b>–<b>{{ $invoices->lastItem() ?? 0 }}</b>
@@ -203,14 +206,17 @@
                                 <td class="text-end">R {{ number_format((float) $inv->subtotal, 2) }}</td>
                                 <td class="text-end">R {{ number_format((float) $inv->total, 2) }}</td>
 
+                                @php
+                                    $payVal = $inv->payment_status ?? ($inv->paymentStatus ?? 'unpaid');
+                                @endphp
                                 <td>
-                                    <span
-                                        class="badge rounded-pill text-bg-{{ $pillPay($inv->payment_status ?? ($inv->paymentStatus ?? 'unpaid')) }}">
-                                        {{ strtoupper($inv->payment_status ?? ($inv->paymentStatus ?? 'unpaid')) }}
+                                    <span class="badge rounded-pill text-bg-{{ $pillPay($payVal) }}">
+                                        {{ strtoupper($payVal) }}
                                     </span>
                                 </td>
 
-                                <td>{{ $inv->issued_at ? \Illuminate\Support\Carbon::parse($inv->issued_at)->format('d/m/Y') : '—' }}
+                                <td>
+                                    {{ $inv->issued_at ? \Illuminate\Support\Carbon::parse($inv->issued_at)->format('d/m/Y') : '—' }}
                                 </td>
 
                                 <td>{{ $inv->salesperson?->name ?? ($inv->salesPerson?->name ?? '—') }}</td>
@@ -230,32 +236,38 @@
 
                                         <ul class="dropdown-menu dropdown-menu-end">
                                             @if ($inv->status === 'draft')
-                                                <li>
-                                                    <a class="dropdown-item"
-                                                        href="{{ tenant_route('tenant.invoices.edit', $inv) }}">
-                                                        Edit
-                                                    </a>
-                                                </li>
+                                                @can('update', $inv)
+                                                    <li>
+                                                        <a class="dropdown-item"
+                                                            href="{{ tenant_route('tenant.invoices.edit', $inv) }}">
+                                                            Edit
+                                                        </a>
+                                                    </li>
+                                                @endcan
                                             @endif
 
                                             @if (tenant_feature($tenant, 'invoice_email_send'))
-                                                <li>
-                                                    <form method="POST"
-                                                        action="{{ tenant_route('tenant.invoices.sendEmail', $inv) }}">
-                                                        @csrf
-                                                        <button class="dropdown-item" type="submit">Send Email</button>
-                                                    </form>
-                                                </li>
+                                                @can('sendEmail', $inv)
+                                                    <li>
+                                                        <form method="POST"
+                                                            action="{{ tenant_route('tenant.invoices.sendEmail', $inv) }}">
+                                                            @csrf
+                                                            <button class="dropdown-item" type="submit">Send Email</button>
+                                                        </form>
+                                                    </li>
+                                                @endcan
                                             @else
-                                                <li>
-                                                    <a href="#" class="dropdown-item" data-upgrade-modal
-                                                        data-upgrade-text="Emailing invoices is available on the Premium plan."
-                                                        data-upgrade-cta="Upgrade to Premium"
-                                                        data-upgrade-href="{{ tenant_route('tenant.billing.upgrade') }}">
-                                                        Send Email <span
-                                                            class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                                                    </a>
-                                                </li>
+                                                @can('sendEmail', $inv)
+                                                    <li>
+                                                        <a href="#" class="dropdown-item" data-upgrade-modal
+                                                            data-upgrade-text="Emailing invoices is available on the Premium plan."
+                                                            data-upgrade-cta="Upgrade to Premium"
+                                                            data-upgrade-href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}">
+                                                            Send Email <span
+                                                                class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                                                        </a>
+                                                    </li>
+                                                @endcan
                                             @endif
                                         </ul>
                                     </div>
@@ -276,5 +288,6 @@
                 {{ $invoices->links() }}
             </div>
         </div>
+
     </div>
 @endsection

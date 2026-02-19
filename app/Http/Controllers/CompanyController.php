@@ -18,6 +18,7 @@ class CompanyController extends Controller
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Company::class);
        
 
         $q = trim((string) $request->query('q', ''));
@@ -68,6 +69,7 @@ class CompanyController extends Controller
     public function create()
     {
         $tenant = app('tenant');
+            $this->authorize('create', Company::class);
 
         $countries = \App\Models\Country::orderBy('name')->get(['id','iso2','name']);
         $companies = Company::where('tenant_id', $tenant->id)->orderBy('name')->get();
@@ -83,6 +85,7 @@ class CompanyController extends Controller
     public function store(Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Company::class);
 
         $data = $request->validate([
             'name' => [
@@ -203,6 +206,8 @@ class CompanyController extends Controller
 
    public function edit(Tenant $tenant, Company $company)
     {
+        $tenant = app('tenant');
+        $this->authorize('update', $company);
         $countries = Country::orderBy('name')->get(['id','name','iso2']);
 
         $billing = $company->addresses()
@@ -223,6 +228,8 @@ class CompanyController extends Controller
 
     public function show(Tenant $tenant, Company $company)
     {
+        $tenant = app('tenant');
+        $this->authorize('view', $company);
         abort_unless($company->tenant_id === $tenant->id, 404);
 
         $company->load(['contacts', 'addresses.country', 'addresses.subdivision']);
@@ -247,6 +254,8 @@ class CompanyController extends Controller
     
     public function update(Request $request, Tenant $tenant, Company $company)
     {
+        $tenant = app('tenant');
+        $this->authorize('update', $company);
         // safety: ensure company belongs to tenant from route
         if ((int) $company->tenant_id !== (int) $tenant->id) {
             abort(404);
@@ -404,6 +413,7 @@ class CompanyController extends Controller
     public function export(string $tenantKey, Request $request): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');
@@ -453,6 +463,21 @@ class CompanyController extends Controller
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv']);
     }
+
+        public function destroy(Tenant $tenant, Company $company)
+        {
+            $tenant = app('tenant');
+            $this->authorize('delete', $company);
+            // safety: ensure company belongs to tenant from route
+            if ((int) $company->tenant_id !== (int) $tenant->id) {
+                abort(404);
+            }
+    
+            $company->delete();
+    
+            return redirect()->to(tenant_route('tenant.companies.index'))
+                ->with('success', 'Company deleted successfully.');
+        }
     
 }
 

@@ -10,35 +10,39 @@ class IdentifyTenantFromPath
 {
     public function handle(Request $request, Closure $next)
     {
+        // Because your route is: t/{tenant:subdomain}
         $tenantParam = $request->route('tenant');
 
         $tenant = $tenantParam instanceof Tenant
             ? $tenantParam
             : Tenant::where('subdomain', $tenantParam)->first();
 
-        if (!$tenant) {
-            abort(404, 'Tenant not found');
-        }
+        abort_unless($tenant, 404, 'Tenant not found');
 
+        // Bind tenant for the request lifecycle
         app()->instance('tenant', $tenant);
-        
         app()->instance('currentTenant', $tenant);
 
         $user = $request->user();
-
-        // ✅ allow super admin to access any tenant
-        if ($user && method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+        if (!$user) {
+            // auth middleware might not be present for some route (e.g. invite accept)
             return $next($request);
         }
 
-        // regular tenant users must match tenant in path
-        if ($user && (int) $user->tenant_id !== (int) $tenant->id) {
-            abort(403, 'You do not belong to this tenant.');
+        // ✅ super_admin can view any tenant
+        if (method_exists($user, 'hasRole') && $user->hasRole('super_admin')) {
+            return $next($request);
         }
+
+        // ✅ tenant user must belong to this tenant
+        abort_unless((int) $user->tenant_id === (int) $tenant->id, 403, 'You do not belong to this tenant.');
 
         return $next($request);
     }
 }
+
+
+
 
 
 

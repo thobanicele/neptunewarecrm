@@ -6,18 +6,24 @@ use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use App\Models\Subscription;
 
 class TenantSettingsController extends Controller
 {
+    public function index(Tenant $tenant)
+    {
+        return view('tenant.settings.index', compact('tenant'));
+    }
+
     public function edit(string $tenantKey)
     {
         $tenant = app('tenant');
 
-        $sub = \App\Models\Subscription::where('tenant_id', $tenant->id)->latest()->first();
+        $sub = Subscription::where('tenant_id', $tenant->id)->latest()->first();
 
         $trialDaysLeft = $sub?->trial_ends_at ? max(0, now()->diffInDays($sub->trial_ends_at, false)) : null;
 
-        return view('tenant.settings.index', compact('tenant', 'sub', 'trialDaysLeft'));
+        return view('tenant.settings.edit', compact('tenant', 'sub', 'trialDaysLeft'));
     }
 
 

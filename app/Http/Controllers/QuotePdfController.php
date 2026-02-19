@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Quote;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use App\Models\Tenant;
 
 class QuotePdfController extends Controller
 {
-    public function stream(\App\Models\Tenant $tenant, Quote $quote)
+    public function stream(Tenant $tenant, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $quote);
         abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
 
         $quote->load([
@@ -28,6 +31,7 @@ class QuotePdfController extends Controller
     public function download(\App\Models\Tenant $tenant, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $quote);
         abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
 
          $quote->load([

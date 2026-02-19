@@ -13,6 +13,7 @@ class ProductController extends Controller
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Product::class);
 
         $q = trim((string) $request->query('q', ''));
 
@@ -66,6 +67,7 @@ class ProductController extends Controller
     public function create(\App\Models\Tenant $tenant)
     {
         $tenant = app('tenant');
+            $this->authorize('create', Product::class);
 
         $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
@@ -80,6 +82,7 @@ class ProductController extends Controller
     public function store(Request $request, \App\Models\Tenant $tenant)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Product::class); 
 
         $data = $request->validate([
             'sku' => [
@@ -123,6 +126,7 @@ class ProductController extends Controller
     public function show(\App\Models\Tenant $tenant, Product $product)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
         $product->load('taxType');
@@ -133,6 +137,7 @@ class ProductController extends Controller
     public function edit(\App\Models\Tenant $tenant, Product $product)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
         $taxTypes = TaxType::query()
@@ -148,6 +153,7 @@ class ProductController extends Controller
     public function update(Request $request, \App\Models\Tenant $tenant, Product $product)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
         $data = $request->validate([
@@ -195,6 +201,7 @@ class ProductController extends Controller
     public function destroy(\App\Models\Tenant $tenant, Product $product)
     {
         $tenant = app('tenant');
+        $this->authorize('delete', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
         $product->delete();
@@ -207,6 +214,7 @@ class ProductController extends Controller
     public function export(string $tenantKey, Request $request): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');

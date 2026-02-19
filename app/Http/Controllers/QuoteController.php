@@ -21,6 +21,7 @@ class QuoteController extends Controller
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        $this ->authorize('viewAny', Quote::class);
 
         $q = trim((string) $request->query('q', ''));
         $status = $request->query('status');
@@ -106,6 +107,7 @@ class QuoteController extends Controller
     public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Quote::class);
 
         // ✅ Prefill from query string
         $prefillCompanyId = $request->integer('company_id') ?: null;
@@ -251,6 +253,7 @@ class QuoteController extends Controller
     public function store(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Quote::class);
 
         $data = $request->validate([
             'deal_id'    => ['nullable', 'integer'],
@@ -461,6 +464,7 @@ class QuoteController extends Controller
     public function show(string $tenantKey, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         $quote->load([
@@ -498,6 +502,7 @@ class QuoteController extends Controller
     public function edit(string $tenantKey, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         $quote->load([
@@ -587,6 +592,7 @@ class QuoteController extends Controller
     public function update(string $tenantKey, Request $request, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         $data = $request->validate([
@@ -792,6 +798,7 @@ class QuoteController extends Controller
     public function convertToInvoice(string $tenantKey, Quote $quote)
     {
         $tenant = app('tenant');
+        $this->authorize('convertToInvoice', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
 
         if (!tenant_feature($tenant, 'invoicing_convert_from_quote')) {
@@ -822,9 +829,10 @@ class QuoteController extends Controller
             ->first();
 
         if ($existing) {
-            return redirect()
-                ->to(tenant_route('tenant.invoices.show', $existing))
-                ->with('success', 'An invoice already exists for this quote. Redirected to the invoice.');
+           return redirect()
+            ->to(tenant_route('tenant.invoices.show', ['invoice' => $existing->id]))
+            ->with('success', 'An invoice already exists for this quote. Redirected to the invoice.');
+
         }
 
         return DB::transaction(function () use ($tenant, $quote) {
@@ -973,6 +981,7 @@ class QuoteController extends Controller
     public function export(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Pro plan.');

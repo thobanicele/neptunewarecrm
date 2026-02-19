@@ -14,6 +14,7 @@ class ContactController extends Controller
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Contact::class);
 
         $q = trim((string) $request->query('q', ''));
         $stage = (string) $request->query('stage', '');
@@ -71,6 +72,7 @@ class ContactController extends Controller
     public function create()
     {
         $tenant = app('tenant');
+        $this->authorize('create', Contact::class);
 
         $companies = Company::where('tenant_id', $tenant->id)
             ->orderBy('name')
@@ -82,6 +84,7 @@ class ContactController extends Controller
     public function store(Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Contact::class);
 
         $request->merge([
             'email' => filled($request->email) ? strtolower(trim($request->email)) : null,
@@ -134,6 +137,7 @@ class ContactController extends Controller
     public function show(string $tenantKey, Contact $contact)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $contact);
 
         abort_unless($contact->tenant_id === $tenant->id, 404);
 
@@ -149,6 +153,7 @@ class ContactController extends Controller
     public function edit(string $tenantKey, Contact $contact)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $contact);
 
         abort_unless($contact->tenant_id === $tenant->id, 404);
 
@@ -162,6 +167,7 @@ class ContactController extends Controller
     public function update(Request $request, string $tenantKey, Contact $contact)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $contact);
 
         abort_unless($contact->tenant_id === $tenant->id, 404);
 
@@ -203,6 +209,7 @@ class ContactController extends Controller
     public function destroy(string $tenantKey, Contact $contact)
     {
         $tenant = app('tenant');
+        $this->authorize('delete', $contact);
 
         abort_unless($contact->tenant_id === $tenant->id, 404);
 
@@ -222,6 +229,7 @@ class ContactController extends Controller
     public function export(string $tenantKey, Request $request): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');

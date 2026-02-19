@@ -7,7 +7,7 @@ use App\Models\Tenant;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Carbon;
+use Carbon\CarbonInterface;
 
 class CompanyStatementMail extends Mailable
 {
@@ -16,8 +16,8 @@ class CompanyStatementMail extends Mailable
     public function __construct(
         public Tenant $tenant,
         public Company $company,
-        public ?Carbon $from,
-        public ?Carbon $to,
+        public ?CarbonInterface $dateFrom,
+        public ?CarbonInterface $dateTo,
         public string $pdfBinary
     ) {}
 
@@ -26,7 +26,12 @@ class CompanyStatementMail extends Mailable
         $subject = "Statement - {$this->company->name} - {$this->tenant->name}";
 
         return $this->subject($subject)
-            ->view('emails.company_statement')
+            ->view('tenant.emails.company_statement', [
+                'tenant'   => $this->tenant,
+                'company'  => $this->company,
+                'dateFrom' => $this->dateFrom,
+                'dateTo'   => $this->dateTo,
+            ])
             ->attachData(
                 $this->pdfBinary,
                 "Statement-{$this->company->id}.pdf",
@@ -34,4 +39,5 @@ class CompanyStatementMail extends Mailable
             );
     }
 }
+
 

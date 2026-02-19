@@ -10,7 +10,9 @@ class DealExportController extends Controller
 {
     public function export(Request $request, Tenant $tenant)
     {
+        abort_unless(auth()->user()->can('export.run'), 403);
         // Example: simple CSV export (you can enhance later)
+            abort_unless(auth()->user()->can('export.run'), 403);
         $filename = 'deals_' . $tenant->subdomain . '_' . now()->format('Ymd_His') . '.csv';
 
         $deals = Deal::query()

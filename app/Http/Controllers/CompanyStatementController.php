@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Mail\CompanyStatementMail;
 use App\Models\Company;
+use App\Models\Invoice;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
+
 class CompanyStatementController extends Controller
 {
     public function show(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
+        $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         if (! $this->canStatement($tenant)) {
@@ -32,6 +35,7 @@ class CompanyStatementController extends Controller
     public function pdf(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
+        $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         if (! $this->canStatement($tenant)) {
@@ -55,6 +59,7 @@ class CompanyStatementController extends Controller
     public function csv(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
+        $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         if (! $this->canStatement($tenant)) {
@@ -101,6 +106,7 @@ class CompanyStatementController extends Controller
     public function email(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
+        $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         // Email sending is Pro feature

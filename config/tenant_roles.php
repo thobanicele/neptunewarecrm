@@ -5,6 +5,7 @@ return [
 
         'tenant_admin' => [
             'users.manage', 'settings.manage',
+            'leads.*','products.*',
             'deals.*', 'contacts.*', 'companies.*',
             'quotes.*', 'invoices.*', 'payments.*',
             'credit_notes.*', 'activities.*',
@@ -12,7 +13,7 @@ return [
         ],
 
         'sales' => [
-            'deals.*', 'contacts.*',
+            'deals.*', 'contacts.*','products.view','leads.*',
             'companies.view',
             'quotes.*',
             'activities.*',
@@ -24,7 +25,7 @@ return [
         ],
 
         'viewer' => [
-            'deals.view','contacts.view','companies.view',
+            'deals.view','contacts.view','companies.view','products.view','leads.view',
             'quotes.view','invoices.view','reports.view',
         ],
     ],

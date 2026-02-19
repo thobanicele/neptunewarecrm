@@ -13,12 +13,14 @@ use App\Models\CreditNoteRefund;
 use App\Models\Payment;
 use App\Services\InvoicePaymentStatusService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
     public function index(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Payment::class);
 
         $q = trim((string) $request->query('q', ''));
 
@@ -130,6 +132,7 @@ class PaymentController extends Controller
     public function openInvoices(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Payment::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         $allocSub = DB::table('transaction_allocations')
@@ -171,6 +174,7 @@ class PaymentController extends Controller
     public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Payment::class);
 
         $prefillCompanyId = $request->integer('company_id') ?: null;
         $prefillContactId = $request->integer('contact_id') ?: null;
@@ -223,6 +227,7 @@ class PaymentController extends Controller
     public function store(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Payment::class);
 
         $data = $request->validate([
             'company_id' => ['required','integer'],
@@ -295,6 +300,7 @@ class PaymentController extends Controller
     public function show(string $tenantKey, Payment $payment)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $payment);
         abort_unless((int) $payment->tenant_id === (int) $tenant->id, 404);
 
         $payment->load('company','contact');
@@ -383,6 +389,7 @@ class PaymentController extends Controller
     public function allocateForm(string $tenantKey, Payment $payment)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $payment);
         abort_unless((int) $payment->tenant_id === (int) $tenant->id, 404);
 
         $payment->load('company','contact');
@@ -429,6 +436,7 @@ class PaymentController extends Controller
     public function allocateStore(Request $request, string $tenantKey, Payment $payment)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $payment);
         abort_unless((int) $payment->tenant_id === (int) $tenant->id, 404);
 
         $data = $request->validate([
@@ -539,6 +547,7 @@ class PaymentController extends Controller
     public function allocationDestroy(string $tenantKey, Payment $payment, TransactionAllocation $allocation)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $payment);
         abort_unless((int)$payment->tenant_id === (int)$tenant->id, 404);
 
         // Ensure allocation belongs to this payment + tenant
@@ -558,6 +567,7 @@ class PaymentController extends Controller
     public function allocationsReset(string $tenantKey, Payment $payment)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $payment);
         abort_unless((int)$payment->tenant_id === (int)$tenant->id, 404);
 
         $invoiceIds = TransactionAllocation::query()
@@ -584,6 +594,7 @@ class PaymentController extends Controller
     public function export(Request $request, string $tenantKey): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');

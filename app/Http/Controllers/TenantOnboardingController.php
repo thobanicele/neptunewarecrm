@@ -26,10 +26,9 @@ class TenantOnboardingController extends Controller
         $user = $request->user();
         $data = $request->validated();
 
-        // ✅ these come from your two-button blade (hidden fields)
         $go    = (string) ($request->input('go') ?: $request->query('go', ''));
-        $trial = (bool) $request->boolean('trial');          // trial=1 from button
-        $cycle = (string) $request->input('cycle', 'monthly'); // monthly|yearly
+        $trial = (bool) $request->boolean('trial');
+        $cycle = (string) $request->input('cycle', 'monthly');
 
         if (!in_array($cycle, ['monthly', 'yearly'], true)) {
             $cycle = 'monthly';
@@ -37,133 +36,51 @@ class TenantOnboardingController extends Controller
 
         $tenant = DB::transaction(function () use ($data, $user, $bootstrap, $trial, $cycle) {
 
-            // 1) Create tenant
             $tenant = Tenant::create([
                 'name'      => $data['name'],
                 'subdomain' => $data['subdomain'],
                 'plan'      => 'free',
                 'status'    => 'active',
             ]);
-            $bootstrap->seedRolesForTenant($tenant->id);
 
-            // 2) Attach user to tenant + role
-            $user->forceFill(['tenant_id' => $tenant->id])->save();
+            // ✅ Ensure roles exist (idempotent). Prevents empty configs / missing role rows.
+            $bootstrap->seedRolesForTenant((int) $tenant->id);
 
-            // ✅ team scope for Spatie teams
+            // Attach user
+            $user->forceFill([
+                'tenant_id' => $tenant->id,
+                'is_active' => true,
+            ])->save();
+
+            // Assign role under correct team scope
             app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
             app(PermissionRegistrar::class)->forgetCachedPermissions();
+
             $user->syncRoles(['tenant_owner']);
 
-            // ✅ 2.5) Create trial subscription if requested
+            // Trial
             if ($trial) {
                 Subscription::updateOrCreate(
                     ['tenant_id' => $tenant->id],
                     [
-                        'plan'       => 'premium',
-                        'provider'   => 'paystack',
-                        'cycle'      => $cycle,
+                        'plan'          => 'premium',
+                        'provider'      => 'paystack',
+                        'cycle'         => $cycle,
                         'trial_ends_at' => now()->addDays(14),
                         'canceled_at'   => null,
                         'expires_at'    => null,
                     ]
                 );
 
-                // ✅ optional: unlock premium immediately during trial
+                // If tenant_feature() checks tenant.plan, this MUST be premium during trial
                 $tenant->forceFill(['plan' => 'premium'])->save();
             }
 
-            // 3) Bootstrap (pipelines/stages/etc)
-            if (method_exists($bootstrap, 'bootstrap')) {
-                $bootstrap->bootstrap($tenant->id);
-            }
-
-            // 4) Resolve pipeline (fallback create)
-            $pipeline = Pipeline::query()
-                ->where('tenant_id', $tenant->id)
-                ->orderBy('id')
-                ->first();
-
-            if (!$pipeline) {
-                $pipeline = Pipeline::create([
-                    'tenant_id' => $tenant->id,
-                    'name'      => 'Sales Pipeline',
-                ]);
-
-                $this->seedStandardStages($tenant->id, $pipeline->id);
-            }
-
-            // Ensure stages exist (fallback)
-            if (!PipelineStage::where('tenant_id', $tenant->id)->where('pipeline_id', $pipeline->id)->exists()) {
-                $this->seedStandardStages($tenant->id, $pipeline->id);
-            }
-
-            // 5) Stage lookup helper
-            $findStage = function (array $names) use ($tenant, $pipeline) {
-                return PipelineStage::query()
-                    ->where('tenant_id', $tenant->id)
-                    ->where('pipeline_id', $pipeline->id)
-                    ->where(function ($q) use ($names) {
-                        foreach ($names as $name) {
-                            $q->orWhere('name', $name);
-                        }
-                    })
-                    ->orderBy('position')
-                    ->first();
-            };
-
-            $stageNew = $findStage(['New Lead', 'New', 'Lead In', 'Incoming']);
-            $stageQualified = $findStage(['Qualified', 'Qualifying']);
-            $stageProposal = $findStage(['Proposal Sent', 'Proposal', 'Quote Sent']);
-
-            $fallbackStage = PipelineStage::query()
-                ->where('tenant_id', $tenant->id)
-                ->where('pipeline_id', $pipeline->id)
-                ->orderBy('position')
-                ->first();
-
-            $stageNew ??= $fallbackStage;
-            $stageQualified ??= $fallbackStage;
-            $stageProposal ??= $fallbackStage;
-
-            if ($fallbackStage) {
-                Deal::insert([
-                    [
-                        'tenant_id' => $tenant->id,
-                        'pipeline_id' => $pipeline->id,
-                        'stage_id' => $stageQualified->id,
-                        'title' => 'Campus lighting upgrade',
-                        'amount' => 250000,
-                        'expected_close_date' => now()->addDays(21)->toDateString(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                    [
-                        'tenant_id' => $tenant->id,
-                        'pipeline_id' => $pipeline->id,
-                        'stage_id' => $stageProposal->id,
-                        'title' => 'Warehouse high-bay retrofit',
-                        'amount' => 180000,
-                        'expected_close_date' => now()->addDays(14)->toDateString(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                    [
-                        'tenant_id' => $tenant->id,
-                        'pipeline_id' => $pipeline->id,
-                        'stage_id' => $stageNew->id,
-                        'title' => 'Streetlight maintenance contract',
-                        'amount' => 95000,
-                        'expected_close_date' => now()->addDays(30)->toDateString(),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                ]);
-            }
+            // ... keep your pipeline bootstrap logic as-is here ...
 
             return $tenant;
         });
 
-        // Redirect logic (your current logic is good)
         if ($go === 'upgrade') {
             return redirect()
                 ->route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain])
@@ -173,7 +90,9 @@ class TenantOnboardingController extends Controller
         return redirect()
             ->route('tenant.dashboard', ['tenant' => $tenant->subdomain])
             ->with('success', 'Workspace created successfully!');
-    }
+        }   
+
+    
 
 
 

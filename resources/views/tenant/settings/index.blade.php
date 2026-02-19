@@ -3,317 +3,174 @@
 @section('content')
     <div class="container-fluid p-0">
 
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h1 class="h3 mb-0">Workspace Settings</h1>
-            <a class="btn btn-outline-secondary" href="{{ tenant_route('tenant.dashboard', ['tenant' => $tenant]) }}">Back</a>
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <div>
+                <h1 class="h3 mb-1">Workspace Settings</h1>
+                <div class="text-muted small">
+                    Manage your workspace configuration and modules.
+                </div>
+            </div>
+            <a class="btn btn-outline-secondary"
+                href="{{ tenant_route('tenant.dashboard', ['tenant' => $tenant->subdomain ?? $tenant]) }}">
+                Back
+            </a>
         </div>
 
-        {{-- Flash --}}
-        @if (session('success'))
-            <div class="alert alert-success alert-dismissible fade show" role="alert" id="flash-success">
-                {{ session('success') }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
+        {{-- Organization Settings --}}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body p-4">
+                <div class="fw-semibold mb-3">Organization Settings</div>
 
-            @push('scripts')
-                <script>
-                    setTimeout(() => {
-                        const el = document.getElementById('flash-success');
-                        if (!el) return;
-                        bootstrap.Alert.getOrCreateInstance(el).close();
-                    }, 3500);
-                </script>
-            @endpush
-        @endif
+                <div class="row g-3">
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Organization" icon="fa-building" tone="success">
+                            <a class="nw-link"
+                                href="{{ tenant_route('tenant.settings.edit', ['tenant' => $tenant->subdomain ?? $tenant]) }}">Profile</a>
+                            <a class="nw-link" href="#">Branding <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Custom Domain <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Branches <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="{{ tenant_route('tenant.billing.upgrade') }}">Manage Subscription</a>
+                        </x-tenant.settings.tile>
+                    </div>
 
-        @if ($errors->any())
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <div class="fw-semibold mb-2">Please fix the following:</div>
-                <ul class="mb-0">
-                    @foreach ($errors->all() as $e)
-                        <li>{{ $e }}</li>
-                    @endforeach
-                </ul>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        @endif
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Users & Roles" icon="fa-users" tone="danger">
+                            <a class="nw-link"
+                                href="{{ tenant_route('tenant.settings.users.index', ['tenant' => $tenant->subdomain ?? $tenant]) }}">Users</a>
 
-        @php
-            $planKey = $tenant->plan ?? config('plans.default_plan', 'free');
-            $plans = config('plans.plans', []);
-            $plan = $plans[$planKey] ?? ($plans['free'] ?? []);
-            $premium = $plans['premium'] ?? [];
-
-            $trialEnabled = (bool) data_get(config('plans.trial', []), 'enabled', false);
-            $trialDays = (int) data_get(config('plans.trial', []), 'days', 14);
-
-            // Optional: only if controller passes $sub (Subscription)
-            $trialEndsAt = $sub->trial_ends_at ?? null;
-            $trialDaysLeft = isset($trialDaysLeft)
-                ? $trialDaysLeft
-                : ($trialEndsAt
-                    ? max(0, now()->diffInDays($trialEndsAt, false))
-                    : null);
-
-            $pricingMonthly = data_get(config('plans.billing.pricing'), 'premium.monthly');
-            $pricingYearly = data_get(config('plans.billing.pricing'), 'premium.yearly');
-
-            $features = (array) data_get($plan, 'features', []);
-            $limits = [
-                'Deals' => data_get($plan, 'deals.max'),
-                'Users' => data_get($plan, 'users.max'),
-                'Pipelines' => data_get($plan, 'pipelines.max'),
-                'Storage (MB)' => data_get($plan, 'storage_mb.max'),
-                'Invoices / month' => data_get($plan, 'invoices.max_per_month'),
-            ];
-
-            $prettyLimit = function ($v) {
-                if (is_null($v)) {
-                    return 'Unlimited';
-                }
-                if ($v === '') {
-                    return '—';
-                }
-                return (string) $v;
-            };
-
-            $boolPill = function ($v) {
-                return $v ? 'success' : 'secondary';
-            };
-        @endphp
-
-        {{-- ✅ PLAN + UPGRADE AREA --}}
-        <div class="row g-3 mb-3">
-            <div class="col-12 col-lg-6">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start gap-2">
-                            <div>
-                                <div class="text-muted small">Current plan</div>
-                                <div class="fs-5 fw-semibold text-capitalize">{{ $planKey }}</div>
-
-                                @if (!is_null($trialDaysLeft))
-                                    <div class="text-muted small mt-1">
-                                        Trial: <b>{{ $trialDaysLeft }}</b> day{{ $trialDaysLeft === 1 ? '' : 's' }} left
-                                    </div>
-                                @elseif($trialEnabled)
-                                    <div class="text-muted small mt-1">
-                                        Trial available: <b>{{ $trialDays }} days</b> (first time only)
-                                    </div>
-                                @endif
-                            </div>
-
-                            @if ($planKey === 'premium')
-                                <span class="badge rounded-pill text-bg-success">PREMIUM</span>
-                            @else
-                                <span class="badge rounded-pill text-bg-secondary">FREE</span>
-                            @endif
-                        </div>
-
-                        <hr>
-
-                        <div class="row g-2">
-                            @foreach ($limits as $label => $value)
-                                <div class="col-6">
-                                    <div class="text-muted small">{{ $label }}</div>
-                                    <div class="fw-semibold">{{ $prettyLimit($value) }}</div>
-                                </div>
-                            @endforeach
-                        </div>
-
-                        <hr>
-
-                        <div class="fw-semibold mb-2">Features</div>
-                        <div class="d-flex flex-wrap gap-2">
-                            @foreach ($features as $k => $enabled)
-                                <span class="badge rounded-pill text-bg-{{ $boolPill($enabled) }}">
-                                    {{ str_replace('_', ' ', ucwords($k)) }}: {{ $enabled ? 'On' : 'Off' }}
-                                </span>
-                            @endforeach
-                        </div>
-
-                        @if ($planKey === 'premium')
-                            <div class="mt-3">
-                                <a href="{{ tenant_route('tenant.billing.upgrade') }}" class="btn btn-outline-primary">
-                                    Manage billing
+                            @hasanyrole('super_admin|tenant_owner|tenant_admin')
+                                <a class="nw-link"
+                                    href="{{ tenant_route('tenant.settings.roles.index', ['tenant' => $tenant->subdomain ?? $tenant]) }}">
+                                    Roles & Permissions
                                 </a>
-                            </div>
-                        @endif
+                            @else
+                                <a class="nw-link" href="javascript:void(0)" onclick="return false;" style="opacity:.6">
+                                    Roles & Permissions <span class="badge bg-light text-muted ms-auto">Admin</span>
+                                </a>
+                            @endhasanyrole
+
+                            <a class="nw-link" href="#">User Preferences <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
                     </div>
-                </div>
-            </div>
 
-            {{-- Upgrade cards --}}
-            <div class="col-12 col-lg-6">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start gap-2">
-                            <div>
-                                <div class="fw-semibold">Upgrade</div>
-                                <div class="text-muted small">Unlock exports, dashboards, statements and more.</div>
-                            </div>
-                            <a href="{{ tenant_route('tenant.billing.upgrade') }}" class="small text-decoration-none">
-                                Full billing page →
-                            </a>
-                        </div>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Taxes & Compliance" icon="fa-receipt" tone="primary">
+                            <a class="nw-link" href="{{ tenant_route('tenant.tax-types.index') }}">Tax Types (VAT)</a>
+                            <a class="nw-link" href="#">Taxes <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
+                    </div>
 
-                        <hr>
-
-                        @if ($planKey === 'premium')
-                            <div class="alert alert-success mb-0">
-                                You’re already on <b>Premium</b>.
-                            </div>
-                        @else
-                            <div class="row g-3">
-                                {{-- Monthly --}}
-                                <div class="col-12 col-md-6">
-                                    <div class="border rounded p-3 h-100">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <div class="fw-semibold">
-                                                    {{ data_get($pricingMonthly, 'label', 'Premium Monthly') }}</div>
-                                                <div class="text-muted small">
-                                                    R{{ number_format((float) data_get($pricingMonthly, 'amount', 0), 2) }}
-                                                    /
-                                                    month
-                                                </div>
-                                            </div>
-                                            <span class="badge text-bg-primary">MONTHLY</span>
-                                        </div>
-
-                                        <ul class="mt-3 mb-3 small text-muted">
-                                            <li>Exports (Excel)</li>
-                                            <li>Reports & dashboards</li>
-                                            <li>Statements</li>
-                                        </ul>
-
-                                        <form method="POST"
-                                            action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
-                                            @csrf
-                                            <input type="hidden" name="cycle" value="monthly">
-                                            <button class="btn btn-primary w-100">Upgrade Monthly</button>
-                                        </form>
-                                    </div>
-                                </div>
-
-                                {{-- Yearly --}}
-                                <div class="col-12 col-md-6">
-                                    <div class="border rounded p-3 h-100">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <div class="fw-semibold">
-                                                    {{ data_get($pricingYearly, 'label', 'Premium Yearly') }}</div>
-                                                <div class="text-muted small">
-                                                    R{{ number_format((float) data_get($pricingYearly, 'amount', 0), 2) }}
-                                                    /
-                                                    year
-                                                </div>
-                                            </div>
-                                            <span class="badge text-bg-dark">YEARLY</span>
-                                        </div>
-
-                                        <ul class="mt-3 mb-3 small text-muted">
-                                            <li>Everything in Monthly</li>
-                                            <li>Best value</li>
-                                            <li>Less admin work</li>
-                                        </ul>
-
-                                        <form method="POST"
-                                            action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
-                                            @csrf
-                                            <input type="hidden" name="cycle" value="yearly">
-                                            <button class="btn btn-outline-primary w-100">Upgrade Yearly</button>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="text-muted small mt-3">
-                                You’ll be redirected to Paystack to complete billing.
-                            </div>
-                        @endif
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Setup & Configurations" icon="fa-gear" tone="warning">
+                            <a class="nw-link" href="#">General <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Currencies <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Reminders <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- Quick links --}}
-        <div class="card mb-3">
-            <div class="card-body d-flex flex-wrap gap-2 align-items-center justify-content-between">
-                <div>
-                    <div class="fw-semibold">Quick links</div>
-                    <div class="text-muted small">Manage workspace configuration and related setup.</div>
-                </div>
+        {{-- Module Settings --}}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <div class="fw-semibold mb-3">Module Settings</div>
 
-                <div class="d-flex gap-2">
-                    <a href="{{ tenant_route('tenant.tax-types.index') }}"
-                        class="btn btn-outline-primary {{ request()->routeIs('tenant.tax-types.*') ? 'active' : '' }}">
-                        <i class="fe fe-percent me-2"></i> Tax Types (VAT)
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        {{-- Settings form --}}
-        <div class="card">
-            <div class="card-body">
-                <form method="POST" action="{{ tenant_route('tenant.settings.update', ['tenant' => $tenant]) }}"
-                    enctype="multipart/form-data">
-                    @csrf
-                    @method('PUT')
-
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Workspace name</label>
-                            <input type="text" name="name" class="form-control"
-                                value="{{ old('name', $tenant->name) }}" required>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label">Subdomain</label>
-                            <div class="input-group">
-                                <span class="input-group-text">/t/</span>
-                                <input type="text" name="subdomain" class="form-control"
-                                    value="{{ old('subdomain', $tenant->subdomain) }}" required>
-                            </div>
-                            <div class="form-text">
-                                Lowercase letters/numbers + hyphens only. Changing this changes your workspace URL.
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label">Logo</label>
-                            <input type="file" name="logo" class="form-control" accept="image/*">
-
-                            @if ($tenant->logo_path)
-                                <div class="mt-2 d-flex align-items-center gap-3">
-                                    <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo"
-                                        style="height:48px;">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" value="1"
-                                            name="remove_logo" id="remove_logo">
-                                        <label class="form-check-label" for="remove_logo">Remove logo</label>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
-
-                        {{-- Bank details --}}
-                        <div class="col-md-12">
-                            <label class="form-label">Bank Details (for Quotes / Invoices)</label>
-                            <textarea name="bank_details" class="form-control" rows="6"
-                                placeholder="Account Name&#10;Bank&#10;Account Number&#10;Branch Code&#10;Swift (optional)&#10;Reference">{{ old('bank_details', $tenant->bank_details) }}</textarea>
-                            <div class="form-text">This prints on your Quote PDF under “Bank Details”.</div>
-                        </div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Sales" icon="fa-cart-shopping" tone="success">
+                            <a class="nw-link" href="#">Quotes <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Invoices <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
                     </div>
 
-                    <div class="mt-4">
-                        <button class="btn btn-primary">Save changes</button>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Customization" icon="fa-palette" tone="info">
+                            <a class="nw-link" href="#">PDF Templates <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Email Notifications <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
                     </div>
 
-                </form>
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <x-tenant.settings.tile title="Automation" icon="fa-bolt" tone="danger">
+                            <a class="nw-link" href="#">Workflow Rules <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                            <a class="nw-link" href="#">Workflow Logs <span
+                                    class="badge bg-light text-muted ms-auto">Soon</span></a>
+                        </x-tenant.settings.tile>
+                    </div>
+                </div>
             </div>
         </div>
 
     </div>
 @endsection
+
+@push('styles')
+    <style>
+        .nw-tile {
+            border: 1px solid rgba(0, 0, 0, .06);
+            border-radius: 14px;
+            padding: 14px;
+            background: #fff;
+            transition: box-shadow .15s ease, transform .15s ease;
+            height: 100%;
+        }
+
+        .nw-tile:hover {
+            box-shadow: 0 8px 22px rgba(0, 0, 0, .08);
+            transform: translateY(-1px);
+        }
+
+        .nw-tile__head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .nw-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .nw-links {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .nw-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .nw-link:hover {
+            background: rgba(0, 0, 0, .04);
+        }
+    </style>
+@endpush

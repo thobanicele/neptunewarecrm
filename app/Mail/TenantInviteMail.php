@@ -19,6 +19,6 @@ class TenantInviteMail extends Mailable
     public function build()
     {
         return $this->subject('You have been invited to join ' . $this->invite->tenant->name)
-            ->view('emails.tenant_invite');
+            ->view('tenant.emails.tenant_invite');
     }
 }

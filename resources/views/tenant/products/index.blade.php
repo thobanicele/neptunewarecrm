@@ -9,20 +9,25 @@
             </div>
 
             <div class="d-flex gap-2">
-                <a href="{{ tenant_route('tenant.products.create') }}" class="btn btn-primary">+ New Product</a>
-
+                @can('create', \App\Models\Product::class)
+                    <a href="{{ tenant_route('tenant.products.create') }}" class="btn btn-primary">+ New Product</a>
+                @endcan
                 @php $qs = http_build_query(request()->query()); @endphp
 
                 @if ($canExport)
-                    <a href="{{ tenant_route('tenant.products.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
+                    @if (tenant_feature($tenant, 'export') && auth()->user()->can('export.run'))
+                        <a href="{{ tenant_route('tenant.products.export') }}{{ $qs ? '?' . $qs : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @endif
                 @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                    @if (tenant_feature($tenant, 'export') && auth()->user()->can('export.run'))
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endif
                 @endif
             </div>
         </div>
@@ -138,24 +143,28 @@
 
                                             <ul class="dropdown-menu dropdown-menu-end">
                                                 <li>
-                                                    <a class="dropdown-item"
-                                                        href="{{ tenant_route('tenant.products.edit', ['product' => $p->id]) }}">
-                                                        Edit
-                                                    </a>
+                                                    @can('update', $p)
+                                                        <a class="dropdown-item"
+                                                            href="{{ tenant_route('tenant.products.edit', ['product' => $p->id]) }}">
+                                                            Edit
+                                                        </a>
+                                                    @endcan
                                                 </li>
                                                 <li>
                                                     <hr class="dropdown-divider">
                                                 </li>
                                                 <li>
-                                                    <form method="POST"
-                                                        action="{{ tenant_route('tenant.products.destroy', ['product' => $p->id]) }}"
-                                                        onsubmit="return confirm('Delete this product?');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button class="dropdown-item text-danger" type="submit">
-                                                            Delete
-                                                        </button>
-                                                    </form>
+                                                    @can('delete', $p)
+                                                        <form method="POST"
+                                                            action="{{ tenant_route('tenant.products.destroy', ['product' => $p->id]) }}"
+                                                            onsubmit="return confirm('Delete this product?');">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button class="dropdown-item text-danger" type="submit">
+                                                                Delete
+                                                            </button>
+                                                        </form>
+                                                    @endcan
                                                 </li>
                                             </ul>
                                         </div>

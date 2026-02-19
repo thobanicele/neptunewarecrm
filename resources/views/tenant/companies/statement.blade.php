@@ -1,69 +1,80 @@
 @extends('layouts.app')
 
+@php
+    $qs = http_build_query(request()->query());
+    $qsPrefix = $qs ? '?' . $qs : '';
+
+    $fromDate = !empty($from) ? \Illuminate\Support\Carbon::parse($from) : now()->startOfMonth();
+    $toDate = !empty($to) ? \Illuminate\Support\Carbon::parse($to) : now()->endOfMonth();
+@endphp
+
 @section('content')
     <div class="container-fluid py-4">
 
         {{-- Top Toolbar --}}
-        <div class="d-flex justify-content-between align-items-start mb-3">
+        <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
             <div>
                 <h3 class="mb-0">Customer Statement</h3>
                 <div class="text-muted small">{{ $company->name }}</div>
             </div>
 
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
                 <a class="btn btn-light" href="{{ tenant_route('tenant.companies.show', $company) }}">Back</a>
 
                 {{-- Export / Actions --}}
-                <div class="btn-group">
-                    <a class="btn btn-outline-secondary"
-                        href="{{ tenant_route('tenant.companies.statement.pdf', $company) . '?' . http_build_query(request()->query()) }}"
-                        title="Download PDF">
-                        <i class="fa fa-file-pdf me-1"></i> PDF
-                    </a>
+                @can('statement', \App\Models\Invoice::class)
+                    <div class="btn-group">
+                        <a class="btn btn-outline-secondary"
+                            href="{{ tenant_route('tenant.companies.statement.pdf', $company) }}{{ $qsPrefix }}"
+                            title="Download PDF">
+                            <i class="fa fa-file-pdf me-1"></i> PDF
+                        </a>
 
-                    <a class="btn btn-outline-secondary"
-                        href="{{ tenant_route('tenant.companies.statement.csv', $company) . '?' . http_build_query(request()->query()) }}"
-                        title="Download CSV">
-                        <i class="fa fa-file-csv me-1"></i> CSV
-                    </a>
+                        <a class="btn btn-outline-secondary"
+                            href="{{ tenant_route('tenant.companies.statement.csv', $company) }}{{ $qsPrefix }}"
+                            title="Download CSV">
+                            <i class="fa fa-file-csv me-1"></i> CSV
+                        </a>
 
-                    <button type="button" class="btn btn-outline-secondary" onclick="window.print()" title="Print">
-                        <i class="fa fa-print"></i>
-                    </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="window.print()" title="Print">
+                            <i class="fa fa-print"></i>
+                        </button>
 
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal"
-                        data-bs-target="#emailStatementModal" title="Send Email">
-                        <i class="fa fa-envelope me-1"></i> Send Email
-                    </button>
-                </div>
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal"
+                            data-bs-target="#emailStatementModal" title="Send Email">
+                            <i class="fa fa-envelope me-1"></i> Send Email
+                        </button>
+                    </div>
+                @endcan
             </div>
         </div>
 
         {{-- Filters (Zoho-like presets) --}}
         <form method="GET" class="d-flex flex-wrap gap-2 align-items-center mb-3" id="statementFilterForm">
             <div style="min-width: 220px;">
+                @php $curRange = ($range ?? request('range', 'this_month')); @endphp
                 <select class="form-select" name="range" id="rangeSelect">
-                    <option value="today" @selected(($range ?? request('range', 'this_month')) === 'today')>Today</option>
-                    <option value="this_week" @selected(($range ?? request('range', 'this_month')) === 'this_week')>This Week</option>
-                    <option value="this_month" @selected(($range ?? request('range', 'this_month')) === 'this_month')>This Month</option>
-                    <option value="this_quarter" @selected(($range ?? request('range', 'this_month')) === 'this_quarter')>This Quarter</option>
-                    <option value="this_year" @selected(($range ?? request('range', 'this_month')) === 'this_year')>This Year</option>
+                    <option value="today" @selected($curRange === 'today')>Today</option>
+                    <option value="this_week" @selected($curRange === 'this_week')>This Week</option>
+                    <option value="this_month" @selected($curRange === 'this_month')>This Month</option>
+                    <option value="this_quarter" @selected($curRange === 'this_quarter')>This Quarter</option>
+                    <option value="this_year" @selected($curRange === 'this_year')>This Year</option>
 
-                    <option value="yesterday" @selected(($range ?? request('range', 'this_month')) === 'yesterday')>Yesterday</option>
-                    <option value="previous_week" @selected(($range ?? request('range', 'this_month')) === 'previous_week')>Previous Week</option>
-                    <option value="previous_month" @selected(($range ?? request('range', 'this_month')) === 'previous_month')>Previous Month</option>
-                    <option value="previous_quarter" @selected(($range ?? request('range', 'this_month')) === 'previous_quarter')>Previous Quarter</option>
-                    <option value="previous_year" @selected(($range ?? request('range', 'this_month')) === 'previous_year')>Previous Year</option>
+                    <option value="yesterday" @selected($curRange === 'yesterday')>Yesterday</option>
+                    <option value="previous_week" @selected($curRange === 'previous_week')>Previous Week</option>
+                    <option value="previous_month" @selected($curRange === 'previous_month')>Previous Month</option>
+                    <option value="previous_quarter" @selected($curRange === 'previous_quarter')>Previous Quarter</option>
+                    <option value="previous_year" @selected($curRange === 'previous_year')>Previous Year</option>
 
-                    <option value="custom" @selected(($range ?? request('range', 'this_month')) === 'custom')>Custom</option>
+                    <option value="custom" @selected($curRange === 'custom')>Custom</option>
                 </select>
             </div>
 
             <div class="d-flex gap-2 align-items-center" id="customDatesWrap">
-                <input type="date" name="from" class="form-control" value="{{ $from }}"
-                    style="min-width: 170px;">
-                <input type="date" name="to" class="form-control" value="{{ $to }}"
-                    style="min-width: 170px;">
+                <input type="date" name="from" class="form-control" value="{{ $fromDate->format('Y-m-d') }}"
+                    style="min-width: 170px;" id="fromInput">
+                <input type="date" name="to" class="form-control" value="{{ $toDate->format('Y-m-d') }}"
+                    style="min-width: 170px;" id="toInput">
                 <button class="btn btn-primary" type="submit">Apply</button>
             </div>
         </form>
@@ -99,24 +110,21 @@
                     </div>
 
                     <div class="col-12 col-lg-6 text-lg-end">
-                        <div class="fw-semibold" style="font-size: 18px;">Customer Statement for {{ $company->name }}</div>
+                        <div class="fw-semibold" style="font-size: 18px;">
+                            Customer Statement for {{ $company->name }}
+                        </div>
                         <div class="text-muted small">
-                            From <strong>{{ \Illuminate\Support\Carbon::parse($from)->format('d/m/Y') }}</strong>
-                            To <strong>{{ \Illuminate\Support\Carbon::parse($to)->format('d/m/Y') }}</strong>
+                            From <strong>{{ $fromDate->format('d/m/Y') }}</strong>
+                            To <strong>{{ $toDate->format('d/m/Y') }}</strong>
                         </div>
                     </div>
                 </div>
 
                 {{-- Summary boxes --}}
                 @php
-                    // Period totals based on ledger table:
-                    $invoiced = (float) ($periodDebit ?? 0); // invoices + refunds are debit, but your controller sets periodDebit = sum(debit)
-                    $paidCredits = (float) ($periodCredit ?? 0); // payments + credit notes are credit, controller periodCredit = sum(credit)
-
                     $openingBal = (float) ($opening ?? 0);
                     $closingBal = (float) ($closing ?? 0);
 
-                    // Optional breakdown: try to infer from ledger type (safe fallback to 0)
                     $paid = (float) collect($ledger)->where('type', 'Payment')->sum('credit');
                     $credits = (float) collect($ledger)->where('type', 'Credit Note')->sum('credit');
                     $refunds = (float) collect($ledger)->where('type', 'Refund')->sum('debit');
@@ -142,6 +150,7 @@
                     <div class="col-12 col-lg-6">
                         <div class="border rounded p-3 h-100">
                             <div class="fw-semibold mb-2">Account Summary</div>
+
                             <div class="d-flex justify-content-between small">
                                 <div class="text-muted">Opening Balance</div>
                                 <div class="fw-semibold">R {{ number_format($openingBal, 2) }}</div>
@@ -198,8 +207,7 @@
                         <tbody>
                             {{-- Opening Balance row --}}
                             <tr>
-                                <td class="text-muted">{{ \Illuminate\Support\Carbon::parse($from)->format('Y-m-d') }}
-                                </td>
+                                <td class="text-muted">{{ $fromDate->format('Y-m-d') }}</td>
                                 <td class="fw-semibold">Opening</td>
                                 <td class="text-muted">—</td>
                                 <td class="text-muted">Opening Balance</td>
@@ -251,34 +259,36 @@
     </div>
 
     {{-- Email Statement Modal --}}
-    <div class="modal fade" id="emailStatementModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <form class="modal-content" method="POST"
-                action="{{ tenant_route('tenant.companies.statement.email', $company) . '?' . http_build_query(request()->query()) }}">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title">Send Statement</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="emailStatement">
-                    <div class="mb-2">
-                        <label class="form-label">To</label>
-                        <input type="email" name="to" class="form-control" value="{{ $company->email ?? '' }}"
-                            placeholder="customer@example.com" required>
-                        <div class="form-text">We’ll generate the statement PDF and email it.</div>
+    @can('statement', \App\Models\Invoice::class)
+        <div class="modal fade" id="emailStatementModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <form class="modal-content" method="POST"
+                    action="{{ tenant_route('tenant.companies.statement.email', $company) }}{{ $qsPrefix }}">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title">Send Statement</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Message (optional)</label>
-                        <textarea name="message" class="form-control" rows="3" placeholder="Hi, please find attached your statement."></textarea>
+                    <div class="modal-body" id="emailStatement">
+                        <div class="mb-2">
+                            <label class="form-label">To</label>
+                            <input type="email" name="to" class="form-control" value="{{ $company->email ?? '' }}"
+                                placeholder="customer@example.com" required>
+                            <div class="form-text">We’ll generate the statement PDF and email it.</div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Message (optional)</label>
+                            <textarea name="message" class="form-control" rows="3" placeholder="Hi, please find attached your statement."></textarea>
+                        </div>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button>
-                    <button class="btn btn-primary" type="submit">Send</button>
-                </div>
-            </form>
+                    <div class="modal-footer">
+                        <button class="btn btn-light" type="button" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary" type="submit">Send</button>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
+    @endcan
 @endsection
 
 @push('scripts')
@@ -287,20 +297,23 @@
             const form = document.getElementById('statementFilterForm');
             const rangeSelect = document.getElementById('rangeSelect');
             const customWrap = document.getElementById('customDatesWrap');
+            const fromInput = document.getElementById('fromInput');
+            const toInput = document.getElementById('toInput');
+
+            function setCustomEnabled(enabled) {
+                customWrap.style.display = enabled ? 'flex' : 'none';
+                if (fromInput) fromInput.disabled = !enabled;
+                if (toInput) toInput.disabled = !enabled;
+            }
 
             function toggleCustom() {
                 const isCustom = (rangeSelect.value === 'custom');
-                customWrap.style.display = isCustom ? 'flex' : 'none';
-                if (!isCustom) {
-                    // auto-submit on preset change
-                    form.submit();
-                }
+                setCustomEnabled(isCustom);
+                if (!isCustom) form.submit();
             }
 
             // Init
-            const current = rangeSelect.value;
-            customWrap.style.display = (current === 'custom') ? 'flex' : 'none';
-
+            setCustomEnabled(rangeSelect.value === 'custom');
             rangeSelect.addEventListener('change', toggleCustom);
         })();
     </script>

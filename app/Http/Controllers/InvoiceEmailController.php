@@ -13,6 +13,7 @@ class InvoiceEmailController extends Controller
     public function send(Request $request, string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
+        $this->authorize('sendEmail', $invoice);
         abort_unless((int)$invoice->tenant_id === (int)$tenant->id, 404);
 
         if (!tenant_feature($tenant, 'invoice_email_send')) {

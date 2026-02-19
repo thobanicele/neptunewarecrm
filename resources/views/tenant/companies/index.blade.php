@@ -49,22 +49,31 @@
             </div>
 
             <div class="d-flex gap-2">
-                @php $qs = http_build_query(request()->query()); @endphp
+                @php
+                    $qs = request()->query();
+                    $canRunExport = auth()->user()->can('export.run');
+                    $hasExportFeature = tenant_feature($tenant, 'export'); // ✅ single source of truth
+                @endphp
 
-                @if (!empty($canExport) && $canExport)
-                    <a href="{{ tenant_route('tenant.companies.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
-                @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                {{-- Export --}}
+                @if ($canRunExport)
+                    @if ($hasExportFeature)
+                        <a href="{{ tenant_route('tenant.companies.export') }}{{ $qs ? '?' . http_build_query($qs) : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @else
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endif
                 @endif
 
-
-                <a class="btn btn-primary" href="{{ tenant_route('tenant.companies.create') }}">Add Company</a>
+                {{-- Add Company --}}
+                @can('create', \App\Models\Company::class)
+                    <a class="btn btn-primary" href="{{ tenant_route('tenant.companies.create') }}">Add Company</a>
+                @endcan
             </div>
         </div>
 
@@ -156,9 +165,7 @@
                                     <td class="text-muted">{{ $c->email ?? '—' }}</td>
                                     <td class="text-muted">{{ $c->phone ?? '—' }}</td>
 
-                                    <td class="text-muted">
-                                        {{ optional($c->updated_at)->format('d/m/Y') ?? '—' }}
-                                    </td>
+                                    <td class="text-muted">{{ optional($c->updated_at)->format('d/m/Y') ?? '—' }}</td>
 
                                     <td class="text-end">
                                         <div class="btn-group" role="group" aria-label="Company actions">
@@ -174,28 +181,33 @@
                                             </button>
 
                                             <ul class="dropdown-menu dropdown-menu-end">
-                                                <li>
-                                                    <a class="dropdown-item"
-                                                        href="{{ tenant_route('tenant.companies.edit', $c) }}">
-                                                        Edit
-                                                    </a>
-                                                </li>
+                                                @can('update', $c)
+                                                    <li>
+                                                        <a class="dropdown-item"
+                                                            href="{{ tenant_route('tenant.companies.edit', $c) }}">
+                                                            Edit
+                                                        </a>
+                                                    </li>
+                                                @endcan
 
-                                                <li>
-                                                    <hr class="dropdown-divider">
-                                                </li>
+                                                @can('delete', $c)
+                                                    <li>
+                                                        <hr class="dropdown-divider">
+                                                    </li>
+                                                    <li>
+                                                        <form method="POST"
+                                                            action="{{ tenant_route('tenant.companies.destroy', $c) }}"
+                                                            onsubmit="return confirm(@js('Delete ' . $c->name . '? This cannot be undone.'));">
 
-                                                <li>
-                                                    <form method="POST"
-                                                        action="{{ tenant_route('tenant.companies.destroy', $c) }}"
-                                                        onsubmit="return confirm('Delete {{ addslashes($c->name) }}? This cannot be undone.');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="dropdown-item text-danger">
-                                                            Delete
-                                                        </button>
-                                                    </form>
-                                                </li>
+                                                            @csrf
+                                                            @method('DELETE')
+
+                                                            <button type="submit" class="dropdown-item text-danger">
+                                                                Delete
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                @endcan
                                             </ul>
                                         </div>
                                     </td>
@@ -233,18 +245,28 @@
 
 @push('scripts')
     <script>
-        // ✅ Debounced autosubmit for search
+        // ✅ Debounced autosubmit for search (preserve all existing params)
         (function() {
             const input = document.getElementById('qInput');
             if (!input) return;
 
             let t = null;
+
             input.addEventListener('input', function() {
                 clearTimeout(t);
                 t = setTimeout(() => {
                     const url = new URL(window.location.href);
-                    url.searchParams.set('q', input.value || '');
+
+                    // set/clear q
+                    if ((input.value || '').trim() === '') {
+                        url.searchParams.delete('q');
+                    } else {
+                        url.searchParams.set('q', input.value);
+                    }
+
+                    // whenever searching, reset paging
                     url.searchParams.set('page', '1');
+
                     window.location.href = url.toString();
                 }, 450);
             });

@@ -6,7 +6,7 @@
 
         <div class="card">
             <div class="card-body">
-                <form method="POST" action="{{ tenant_route('quotes.store') }}">
+                <form method="POST" action="{{ tenant_route('tenant.deals.store') }}">
                     @csrf
 
                     @if ($lead)
@@ -86,7 +86,7 @@
                     @endif
 
                     <button class="btn btn-primary">Create Deal</button>
-                    <a href="{{ tenant_route('quotes.index') }}" class="btn btn-light">Back</a>
+                    <a href="{{ tenant_route('tenant.deals.index') }}" class="btn btn-light">Back</a>
 
                 </form>
             </div>

@@ -10,20 +10,25 @@
             </div>
 
             <div class="d-flex gap-2">
-                <a href="{{ tenant_route('tenant.payments.create') }}" class="btn btn-primary">Record Payment</a>
-
+                @can('create', \App\Models\Payment::class)
+                    <a href="{{ tenant_route('tenant.payments.create') }}" class="btn btn-primary">Record Payment</a>
+                @endcan
                 @php $qs = http_build_query(request()->query()); @endphp
 
                 @if (($canExport ?? false) || tenant_feature($tenant, 'export'))
-                    <a href="{{ tenant_route('tenant.payments.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
+                    @can('export', \App\Models\Payment::class)
+                        <a href="{{ tenant_route('tenant.payments.export') }}{{ $qs ? '?' . $qs : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @endcan
                 @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                    @can('export', \App\Models\Payment::class)
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endcan
                 @endif
             </div>
         </div>
@@ -224,15 +229,17 @@
 
                                             @if ($allocated > 0.009)
                                                 <li>
-                                                    <form method="POST"
-                                                        action="{{ tenant_route('tenant.payments.allocations.reset', $p) }}"
-                                                        onsubmit="return confirm('Remove ALL allocations for this payment?');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button class="dropdown-item text-danger" type="submit">
-                                                            Reset allocations
-                                                        </button>
-                                                    </form>
+                                                    @can('update', $p)
+                                                        <form method="POST"
+                                                            action="{{ tenant_route('tenant.payments.allocations.reset', $p) }}"
+                                                            onsubmit="return confirm('Remove ALL allocations for this payment?');">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button class="dropdown-item text-danger" type="submit">
+                                                                Reset allocations
+                                                            </button>
+                                                        </form>
+                                                    @endcan
                                                 </li>
                                             @else
                                                 <li><span class="dropdown-item text-muted">No allocations to reset</span>

@@ -4,13 +4,13 @@
     <div class="container-fluid p-0">
 
         {{-- Header --}}
-        <div class="d-flex justify-content-between align-items-start mb-2">
+        <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
             <div>
                 <h1 class="h3 mb-0">{{ $company->name }}</h1>
                 <div class="text-muted small">Company profile</div>
             </div>
 
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
                 <a class="btn btn-light" href="{{ tenant_route('tenant.companies.index') }}">Back</a>
 
                 {{-- Quick Statement actions --}}
@@ -50,41 +50,52 @@
                     </button>
 
                     <ul class="dropdown-menu dropdown-menu-end">
-                        <li>
-                            <a class="dropdown-item"
-                                href="{{ tenant_route('tenant.quotes.create') . '?company_id=' . $company->id }}">
-                                New Quote
-                            </a>
-                        </li>
+                        @can('create', \App\Models\Quote::class)
+                            <li>
+                                <a class="dropdown-item"
+                                    href="{{ tenant_route('tenant.quotes.create') . '?company_id=' . $company->id }}">
+                                    New Quote
+                                </a>
+                            </li>
+                        @endcan
 
-                        <li>
-                            <a class="dropdown-item"
-                                href="{{ tenant_route('tenant.invoices.create') . '?company_id=' . $company->id }}">
-                                New Invoice
-                            </a>
-                        </li>
+                        @can('create', \App\Models\Invoice::class)
+                            <li>
+                                <a class="dropdown-item"
+                                    href="{{ tenant_route('tenant.invoices.create') . '?company_id=' . $company->id }}">
+                                    New Invoice
+                                </a>
+                            </li>
+                        @endcan
 
-                        <li>
-                            <hr class="dropdown-divider">
-                        </li>
+                        @can('create', \App\Models\Payment::class)
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li>
+                                <a class="dropdown-item"
+                                    href="{{ tenant_route('tenant.payments.create') . '?company_id=' . $company->id }}">
+                                    Record Payment
+                                </a>
+                            </li>
+                        @endcan
 
-                        <li>
-                            <a class="dropdown-item"
-                                href="{{ tenant_route('tenant.payments.create') . '?company_id=' . $company->id }}">
-                                Record Payment
-                            </a>
-                        </li>
-
-                        <li>
-                            <a class="dropdown-item"
-                                href="{{ tenant_route('tenant.credit-notes.create') . '?company_id=' . $company->id }}">
-                                New Credit Note
-                            </a>
-                        </li>
+                        @can('create', \App\Models\CreditNote::class)
+                            <li>
+                                <a class="dropdown-item"
+                                    href="{{ tenant_route('tenant.credit-notes.create') . '?company_id=' . $company->id }}">
+                                    New Credit Note
+                                </a>
+                            </li>
+                        @endcan
                     </ul>
                 </div>
 
-                <a class="btn btn-outline-secondary" href="{{ tenant_route('tenant.companies.edit', $company) }}">Edit</a>
+                @can('update', $company)
+                    <a class="btn btn-outline-secondary" href="{{ tenant_route('tenant.companies.edit', $company) }}">
+                        Edit
+                    </a>
+                @endcan
             </div>
         </div>
 
@@ -119,7 +130,7 @@
                 <div class="card">
                     <div class="card-header"><strong>Details</strong></div>
                     <div class="card-body">
-                        <div><strong>Type:</strong> {{ $company->type }}</div>
+                        <div><strong>Type:</strong> {{ $company->type ?: '—' }}</div>
                         <div><strong>Email:</strong> {{ $company->email ?? '—' }}</div>
                         <div><strong>Phone:</strong> {{ $company->phone ?? '—' }}</div>
 
@@ -165,16 +176,13 @@
                                 <div class="border rounded p-3 h-100">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <div class="fw-semibold">Billing Address</div>
-                                        @if ($billing && data_get($billing, 'is_default_billing'))
+                                        @if (!empty($billing) && data_get($billing, 'is_default_billing'))
                                             <span class="badge bg-success">Default</span>
                                         @endif
                                     </div>
 
                                     @if ($billing)
-                                        <div class="small text-muted mb-1">
-                                            {{ data_get($billing, 'label') ?: '—' }}
-                                        </div>
-
+                                        <div class="small text-muted mb-1">{{ data_get($billing, 'label') ?: '—' }}</div>
                                         <div>{{ data_get($billing, 'attention') ?: '' }}</div>
                                         <div class="text-muted small">{{ data_get($billing, 'phone') ?: '' }}</div>
 
@@ -214,16 +222,13 @@
                                 <div class="border rounded p-3 h-100">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <div class="fw-semibold">Shipping Address</div>
-                                        @if ($shipping && data_get($shipping, 'is_default_shipping'))
+                                        @if (!empty($shipping) && data_get($shipping, 'is_default_shipping'))
                                             <span class="badge bg-success">Default</span>
                                         @endif
                                     </div>
 
                                     @if ($shipping)
-                                        <div class="small text-muted mb-1">
-                                            {{ data_get($shipping, 'label') ?: '—' }}
-                                        </div>
-
+                                        <div class="small text-muted mb-1">{{ data_get($shipping, 'label') ?: '—' }}</div>
                                         <div>{{ data_get($shipping, 'attention') ?: '' }}</div>
                                         <div class="text-muted small">{{ data_get($shipping, 'phone') ?: '' }}</div>
 

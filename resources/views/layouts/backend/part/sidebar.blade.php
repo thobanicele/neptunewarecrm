@@ -75,7 +75,7 @@
             </a>
         </li>
         <li class="sidebar-item">
-            <a class="sidebar-link" href="{{ tenant_route('tenant.settings.edit') }}">
+            <a class="sidebar-link" href="{{ tenant_route('tenant.settings.index') }}">
                 <i class="align-middle" data-feather="settings"></i>
                 <span class="align-middle">Settings</span>
             </a>

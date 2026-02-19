@@ -271,26 +271,31 @@
                     <a href="{{ tenant_route('tenant.invoices.edit', ['invoice' => $invoice->id]) }}"
                         class="btn btn-outline-secondary">Edit</a>
                 @endif
+                @can('pdf', $invoice)
+                    <a href="{{ tenant_route('tenant.invoices.pdf.stream', ['invoice' => $invoice->id]) }}" target="_blank"
+                        class="btn btn-outline-primary">PDF</a>
 
-                <a href="{{ tenant_route('tenant.invoices.pdf.stream', ['invoice' => $invoice->id]) }}" target="_blank"
-                    class="btn btn-outline-primary">PDF</a>
-
-                <a href="{{ tenant_route('tenant.invoices.pdf.download', ['invoice' => $invoice->id]) }}"
-                    class="btn btn-primary">Download</a>
+                    <a href="{{ tenant_route('tenant.invoices.pdf.download', ['invoice' => $invoice->id]) }}"
+                        class="btn btn-primary">Download</a>
+                @endcan
 
                 @if ($invoice->status === 'draft')
-                    <form method="POST" action="{{ tenant_route('tenant.invoices.issue', $invoice) }}" class="d-inline">
-                        @csrf
-                        <button class="btn btn-success">Issue</button>
-                    </form>
+                    @can('issue', $invoice)
+                        <form method="POST" action="{{ tenant_route('tenant.invoices.issue', $invoice) }}" class="d-inline">
+                            @csrf
+                            <button class="btn btn-success">Issue</button>
+                        </form>
+                    @endcan
                 @endif
 
                 @if ($invoice->status === 'issued' && tenant_feature(app('tenant'), 'invoice_email_send'))
-                    <form method="POST" action="{{ tenant_route('tenant.invoices.markPaid', $invoice) }}"
-                        class="d-inline">
-                        @csrf
-                        <button class="btn btn-outline-success">Mark Paid</button>
-                    </form>
+                    @can('markPaid', $invoice)
+                        <form method="POST" action="{{ tenant_route('tenant.invoices.markPaid', $invoice) }}"
+                            class="d-inline">
+                            @csrf
+                            <button class="btn btn-outline-success">Mark Paid</button>
+                        </form>
+                    @endcan
                 @endif
             </div>
         </div>

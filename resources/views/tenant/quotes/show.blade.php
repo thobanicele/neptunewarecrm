@@ -258,24 +258,30 @@
                 <a href="{{ tenant_route('tenant.quotes.edit', ['quote' => $quote->id]) }}"
                     class="btn btn-outline-secondary">Edit</a>
                 @if (tenant_feature($tenant, 'invoicing_convert_from_quote'))
-                    <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}">
-                        @csrf
-                        <button class="btn btn-primary">Convert to Invoice</button>
-                    </form>
+                    @can('convertToInvoice', $quote)
+                        <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}">
+                            @csrf
+                            <button class="btn btn-primary">Convert to Invoice</button>
+                        </form>
+                    @endcan
                 @else
-                    <a href="#" class="btn btn-outline-primary" data-upgrade-modal
-                        data-upgrade-text="Quote → Invoice conversion is available on the Premium plan."
-                        data-upgrade-cta="Upgrade to Premium"
-                        data-upgrade-href="{{ tenant_route('tenant.billing.upgrade') }}">
-                        Convert to Invoice <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                    @can('convertToInvoice', $quote)
+                        <a href="#" class="btn btn-outline-primary" data-upgrade-modal
+                            data-upgrade-text="Quote → Invoice conversion is available on the Premium plan."
+                            data-upgrade-cta="Upgrade to Premium"
+                            data-upgrade-href="{{ tenant_route('tenant.billing.upgrade') }}">
+                            Convert to Invoice <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endcan
                 @endif
 
+                @can('pdf', $quote)
+                    <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
+                        class="btn btn-outline-primary">PDF</a>
 
-                <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
-                    class="btn btn-outline-primary">PDF</a>
-                <a href="{{ tenant_route('tenant.quotes.pdf.download', ['quote' => $quote->id]) }}"
-                    class="btn btn-primary">Download</a>
+                    <a href="{{ tenant_route('tenant.quotes.pdf.download', ['quote' => $quote->id]) }}"
+                        class="btn btn-primary">Download</a>
+                @endcan
             </div>
         </div>
 

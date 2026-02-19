@@ -8,7 +8,8 @@
                 <h1 class="h3 mb-0 d-flex align-items-center gap-2">
                     Contacts
                     <span class="badge bg-light text-dark">
-                        Total: {{ method_exists($contacts, 'total') ? $contacts->total() : $contacts->count() }}
+                        Total:
+                        {{ method_exists($contacts, 'total') ? $contacts->total() : $contacts->count() }}
                     </span>
                 </h1>
                 <div class="text-muted small">Tenant: {{ $tenant->name }} ({{ $tenant->subdomain }})</div>
@@ -18,21 +19,28 @@
                 @php $qs = http_build_query(request()->query()); @endphp
 
                 @if (!empty($canExport) && $canExport)
-                    <a href="{{ tenant_route('tenant.contacts.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
+                    @if (tenant_feature($tenant, 'export') && auth()->user()->can('export.run'))
+                        <a href="{{ tenant_route('tenant.contacts.export') }}{{ $qs ? '?' . $qs : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @endif
                 @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                    @if (tenant_feature($tenant, 'export') && auth()->user()->can('export.run'))
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endif
                 @endif
 
-                <a href="{{ tenant_route('tenant.contacts.create') }}" class="btn btn-primary">+ Add Contact</a>
+                @can('create', \App\Models\Contact::class)
+                    <a href="{{ tenant_route('tenant.contacts.create') }}" class="btn btn-primary">+ Add Contact</a>
+                @endcan
             </div>
         </div>
 
+        {{-- Flash messages --}}
         @if (session('success'))
             <div class="alert alert-success alert-dismissible fade show" role="alert" id="flash-success">
                 {{ session('success') }}
@@ -99,12 +107,18 @@
                         @php
                             $hasQ = !empty(trim((string) ($q ?? '')));
                             $hasStage = !empty(trim((string) ($stage ?? '')));
+                            $isPaginator = method_exists($contacts, 'total');
                         @endphp
 
                         <div class="d-flex justify-content-between align-items-center mt-2">
                             <div class="text-muted small">
-                                Showing <b>{{ $contacts->firstItem() ?? 0 }}</b>–<b>{{ $contacts->lastItem() ?? 0 }}</b>
-                                of <b>{{ $contacts->total() }}</b> contacts
+                                @if ($isPaginator)
+                                    Showing
+                                    <b>{{ $contacts->firstItem() ?? 0 }}</b>–<b>{{ $contacts->lastItem() ?? 0 }}</b>
+                                    of <b>{{ $contacts->total() }}</b> contacts
+                                @else
+                                    Showing <b>{{ $contacts->count() }}</b> contacts
+                                @endif
                             </div>
 
                             @if ($hasQ || $hasStage)
@@ -143,8 +157,16 @@
 
                         <tbody>
                             @forelse($contacts as $c)
+                                @php
+                                    $stageLabel = trim((string) ($c->lifecycle_stage ?? ''));
+                                @endphp
                                 <tr>
-                                    <td class="fw-semibold">{{ $c->name }}</td>
+                                    <td class="fw-semibold">
+                                        <a class="text-decoration-none"
+                                            href="{{ tenant_route('tenant.contacts.show', $c) }}">
+                                            {{ $c->name }}
+                                        </a>
+                                    </td>
                                     <td class="text-muted">{{ $c->email ?? '—' }}</td>
                                     <td class="text-muted">{{ $c->phone ?? '—' }}</td>
                                     <td>
@@ -159,11 +181,11 @@
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-dark">
-                                            {{ ucwords(str_replace('_', ' ', (string) $c->lifecycle_stage)) }}
+                                            {{ $stageLabel ? ucwords(str_replace('_', ' ', $stageLabel)) : '—' }}
                                         </span>
                                     </td>
                                     <td class="text-muted">
-                                        {{ optional($c->updated_at)->format('d/m/Y') ?? '—' }}
+                                        {{ $c->updated_at ? $c->updated_at->format('d/m/Y') : '—' }}
                                     </td>
 
                                     <td class="text-end">
@@ -180,28 +202,31 @@
                                             </button>
 
                                             <ul class="dropdown-menu dropdown-menu-end">
-                                                <li>
-                                                    <a class="dropdown-item"
-                                                        href="{{ tenant_route('tenant.contacts.edit', $c) }}">
-                                                        Edit
-                                                    </a>
-                                                </li>
+                                                @can('update', $c)
+                                                    <li>
+                                                        <a class="dropdown-item"
+                                                            href="{{ tenant_route('tenant.contacts.edit', $c) }}">
+                                                            Edit
+                                                        </a>
+                                                    </li>
+                                                @endcan
 
-                                                <li>
-                                                    <hr class="dropdown-divider">
-                                                </li>
-
-                                                <li>
-                                                    <form method="POST"
-                                                        action="{{ tenant_route('tenant.contacts.destroy', $c) }}"
-                                                        onsubmit="return confirm('Delete this contact?')">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="dropdown-item text-danger">
-                                                            Delete
-                                                        </button>
-                                                    </form>
-                                                </li>
+                                                @can('delete', $c)
+                                                    <li>
+                                                        <hr class="dropdown-divider">
+                                                    </li>
+                                                    <li>
+                                                        <form method="POST"
+                                                            action="{{ tenant_route('tenant.contacts.destroy', $c) }}"
+                                                            onsubmit="return confirm('Delete {{ addslashes($c->name) }}? This cannot be undone.');">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit" class="dropdown-item text-danger">
+                                                                Delete
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                @endcan
                                             </ul>
                                         </div>
                                     </td>
@@ -216,20 +241,22 @@
                 </div>
             </div>
 
-            <div class="card-footer">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div class="text-muted small">
-                        Showing {{ $contacts->firstItem() ?? 0 }}–{{ $contacts->lastItem() ?? 0 }} of
-                        {{ $contacts->total() }}
-                        <span class="ms-2 badge bg-light text-dark">
-                            Page {{ $contacts->currentPage() }} / {{ $contacts->lastPage() }}
-                        </span>
-                    </div>
-                    <div>
-                        {{ $contacts->links() }}
+            @if (method_exists($contacts, 'links'))
+                <div class="card-footer">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="text-muted small">
+                            Showing {{ $contacts->firstItem() ?? 0 }}–{{ $contacts->lastItem() ?? 0 }} of
+                            {{ $contacts->total() }}
+                            <span class="ms-2 badge bg-light text-dark">
+                                Page {{ $contacts->currentPage() }} / {{ $contacts->lastPage() }}
+                            </span>
+                        </div>
+                        <div>
+                            {{ $contacts->links() }}
+                        </div>
                     </div>
                 </div>
-            </div>
+            @endif
         </div>
 
     </div>
@@ -237,7 +264,7 @@
 
 @push('scripts')
     <script>
-        // ✅ Debounced autosubmit for search
+        // Debounced autosubmit for search
         (function() {
             const input = document.getElementById('qInput');
             if (!input) return;

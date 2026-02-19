@@ -5,20 +5,24 @@ namespace App\Http\Controllers;
 use App\Models\Invoice;
 use App\Models\TransactionAllocation;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use App\Models\Tenant;
 
 class InvoicePdfController extends Controller
 {
-    public function stream(\App\Models\Tenant $tenant, Invoice $invoice)
+    public function stream(Tenant $tenant, Invoice $invoice)
     {
+        $this->authorize('pdf', $invoice);
         return $this->render($tenant, $invoice, 'stream');
     }
 
-    public function download(\App\Models\Tenant $tenant, Invoice $invoice)
+    public function download(Tenant $tenant, Invoice $invoice)
     {
+        $this->authorize('pdf', $invoice);
         return $this->render($tenant, $invoice, 'download');
     }
 
-    private function render(\App\Models\Tenant $tenantParam, Invoice $invoice, string $mode)
+    private function render(Tenant $tenantParam, Invoice $invoice, string $mode)
     {
         $tenant = app('tenant');
         abort_unless((int) $invoice->tenant_id === (int) $tenant->id, 404);

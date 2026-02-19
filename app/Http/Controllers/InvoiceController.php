@@ -26,6 +26,7 @@ class InvoiceController extends Controller
     public function index(string $tenantKey, \Illuminate\Http\Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Invoice::class);
 
         $q = trim((string) $request->query('q', ''));
 
@@ -121,6 +122,8 @@ class InvoiceController extends Controller
 
     public function show(Tenant $tenant, Invoice $invoice)
     {
+        $tenant = app('tenant');
+        $this->authorize('view', $invoice);
         abort_unless((int) $invoice->tenant_id === (int) $tenant->id, 404);
 
         // Load everything your invoice UI already uses + allocations (with source docs)
@@ -222,6 +225,7 @@ class InvoiceController extends Controller
     public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Invoice::class);
 
         // Feature gate
         if (!tenant_feature($tenant, 'invoicing_manual')) {
@@ -366,6 +370,7 @@ class InvoiceController extends Controller
     public function store(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', Invoice::class);
 
         if (!tenant_feature($tenant, 'invoicing_manual')) {
             return back()->with('error', 'Invoicing is not enabled for your plan.');
@@ -559,22 +564,25 @@ class InvoiceController extends Controller
                 $invoice->items()->create($item);
             }
 
-            return redirect()->to(tenant_route('tenant.invoices.show', $invoice))
+            return redirect()->to(tenant_route('tenant.invoices.show', ['invoice' => $invoice->id]))
                 ->with('success', 'Invoice created.');
-        });
+
+                    });
     }
 
     public function edit(string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $invoice);
         abort_unless($invoice->tenant_id === $tenant->id, 404);
 
-        return view('tenant.invoices.edit', compact('invoice'));
+        return view('tenant.invoices.edit', compact('tenant','invoice'));
     }
 
     public function update(Request $request, string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
+        $this->authorize('update', $invoice);
         abort_unless($invoice->tenant_id === $tenant->id, 404);
 
         if ($invoice->status !== 'draft') {
@@ -593,6 +601,7 @@ class InvoiceController extends Controller
     public function issue(string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
+        $this->authorize('issue', $invoice);
         abort_unless((int)$invoice->tenant_id === (int)$tenant->id, 404);
 
         if ($invoice->status === 'issued') {
@@ -632,6 +641,7 @@ class InvoiceController extends Controller
     public function markPaid(string $tenantKey, Invoice $invoice)
     {
         $tenant = app('tenant');
+        $this->authorize('markPaid', $invoice);
         abort_unless((int) $invoice->tenant_id === (int) $tenant->id, 404);
 
         // Pro-only
@@ -708,11 +718,12 @@ class InvoiceController extends Controller
     public function export(string $tenantKey, Request $request): StreamedResponse
     {
         $tenant = app('tenant');
+        $this->authorize('export', Invoice::class);
 
-        // Pro-only (you can swap this to 'export' if that's your final key)
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');
         }
+
 
         // Same filters/sort as index
         $q = trim((string) $request->query('q', ''));

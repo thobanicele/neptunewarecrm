@@ -26,6 +26,7 @@ class DealController extends Controller
     public function index(Request $request)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', Deal::class);
 
         $stageId = $request->query('stage_id');
 
@@ -84,56 +85,56 @@ class DealController extends Controller
 
 
     public function kanban(Tenant $tenant)
-{
-    $tenant = app('tenant');
+    {
+        $tenant = app('tenant');
 
-    $pipeline = Pipeline::where('tenant_id', $tenant->id)
-        ->orderByDesc('is_default')
-        ->firstOrFail();
+        $pipeline = Pipeline::where('tenant_id', $tenant->id)
+            ->orderByDesc('is_default')
+            ->firstOrFail();
 
-    $stages = $pipeline->stages()->orderBy('position')->get();
+        $stages = $pipeline->stages()->orderBy('position')->get();
 
-    // For qualify modal (if you use it on kanban page)
-    $companies = Company::where('tenant_id', $tenant->id)
-        ->orderBy('name')
-        ->get(['id','name']);
+        // For qualify modal (if you use it on kanban page)
+        $companies = Company::where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
 
-    // ✅ Load deals + next follow-up date (no N+1)
-    $allDeals = Deal::query()
-        ->where('tenant_id', $tenant->id)
-        ->where('pipeline_id', $pipeline->id)
-        ->with(['stage'])
-        ->withMin([
-            'activities as next_followup_at' => fn ($q) =>
-                $q->whereNull('done_at')->whereNotNull('due_at')
-        ], 'due_at')
-        ->orderByDesc('amount')
-        ->get();
+        // ✅ Load deals + next follow-up date (no N+1)
+        $allDeals = Deal::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('pipeline_id', $pipeline->id)
+            ->with(['stage'])
+            ->withMin([
+                'activities as next_followup_at' => fn ($q) =>
+                    $q->whereNull('done_at')->whereNotNull('due_at')
+            ], 'due_at')
+            ->orderByDesc('amount')
+            ->get();
 
-    // ✅ Group deals by stage_id for the blade: $deals[$stageId]
-    $deals = $allDeals->groupBy('stage_id');
+        // ✅ Group deals by stage_id for the blade: $deals[$stageId]
+        $deals = $allDeals->groupBy('stage_id');
 
-    // Stats per stage (count + sum)
-    $stats = Deal::query()
-        ->selectRaw('stage_id, COUNT(*) as cnt, COALESCE(SUM(amount),0) as total_amount')
-        ->where('tenant_id', $tenant->id)
-        ->where('pipeline_id', $pipeline->id)
-        ->groupBy('stage_id')
-        ->get()
-        ->keyBy('stage_id');
+        // Stats per stage (count + sum)
+        $stats = Deal::query()
+            ->selectRaw('stage_id, COUNT(*) as cnt, COALESCE(SUM(amount),0) as total_amount')
+            ->where('tenant_id', $tenant->id)
+            ->where('pipeline_id', $pipeline->id)
+            ->groupBy('stage_id')
+            ->get()
+            ->keyBy('stage_id');
 
-    $totalPipelineAmount = (float) $stats->sum('total_amount');
+        $totalPipelineAmount = (float) $stats->sum('total_amount');
 
-    return view('tenant.deals.kanban', compact(
-        'tenant', 'pipeline', 'stages', 'deals', 'stats', 'totalPipelineAmount', 'companies'
-    ));
-}
+        return view('tenant.deals.kanban', compact(
+            'tenant', 'pipeline', 'stages', 'deals', 'stats', 'totalPipelineAmount', 'companies'
+        ));
+    }
 
 
     public function create(Request $request)
     {
         $tenant = app('tenant');
-
+        $this->authorize('create', Deal::class);
         $companies = Company::where('tenant_id', $tenant->id)->orderBy('name')->get();
 
         $pipelines = Pipeline::where('tenant_id', $tenant->id)->orderBy('name')->get();
@@ -216,6 +217,7 @@ class DealController extends Controller
     public function edit(Tenant $tenant, Contact $deal)
     {
         $tenant = app('tenant');
+        $this->authorize('edit', $deal);
         abort_unless((int)$deal->tenant_id === (int)$tenant->id, 404);
 
         $pipeline = Pipeline::where('tenant_id', $tenant->id)
@@ -270,6 +272,7 @@ class DealController extends Controller
     public function destroy(Tenant $tenant, Deal $deal)
     {
         $tenant = app('tenant');
+        $this->authorize('delete', $deal);
 
         abort_unless((int) $deal->tenant_id === (int) $tenant->id, 404);
 
@@ -340,49 +343,51 @@ class DealController extends Controller
     }
 
     public function updateStage(Request $request, Tenant $tenant, Deal $deal)
-{
-    abort_unless((int) $deal->tenant_id === (int) $tenant->id, 404);
+    {
+        $tenant = app('tenant');
+        $this->authorize('updateStage', $deal);
+        abort_unless((int) $deal->tenant_id === (int) $tenant->id, 404);
 
-    $data = $request->validate([
-        'stage_id' => ['required', 'integer', 'exists:pipeline_stages,id'],
-    ]);
-
-    // Ensure stage belongs to the same tenant (through pipeline)
-    $stage = PipelineStage::query()
-        ->where('id', $data['stage_id'])
-        ->whereHas('pipeline', fn ($q) => $q->where('tenant_id', $tenant->id))
-        ->firstOrFail();
-
-    return DB::transaction(function () use ($deal, $stage) {
-        $oldStageId = $deal->stage_id;
-
-        $deal->update(['stage_id' => $stage->id]);
-
-        // Optional activity log (guard meta column)
-        $payload = [
-            'tenant_id' => $deal->tenant_id,
-            'deal_id'   => $deal->id,
-            'type'      => 'stage_changed',
-            'message'   => "Stage changed to {$stage->name}",
-        ];
-
-        if (Schema::hasColumn('deal_activities', 'meta')) {
-            $payload['meta'] = json_encode([
-                'from_stage_id' => $oldStageId,
-                'to_stage_id'   => $stage->id,
-            ]);
-        }
-
-        DealActivity::create($payload);
-
-        return response()->json([
-            'ok' => true,
-            'deal_id' => $deal->id,
-            'stage_id' => $stage->id,
-            'stage_name' => $stage->name,
+        $data = $request->validate([
+            'stage_id' => ['required', 'integer', 'exists:pipeline_stages,id'],
         ]);
-    });
-}
+
+        // Ensure stage belongs to the same tenant (through pipeline)
+        $stage = PipelineStage::query()
+            ->where('id', $data['stage_id'])
+            ->whereHas('pipeline', fn ($q) => $q->where('tenant_id', $tenant->id))
+            ->firstOrFail();
+
+        return DB::transaction(function () use ($deal, $stage) {
+            $oldStageId = $deal->stage_id;
+
+            $deal->update(['stage_id' => $stage->id]);
+
+            // Optional activity log (guard meta column)
+            $payload = [
+                'tenant_id' => $deal->tenant_id,
+                'deal_id'   => $deal->id,
+                'type'      => 'stage_changed',
+                'message'   => "Stage changed to {$stage->name}",
+            ];
+
+            if (Schema::hasColumn('deal_activities', 'meta')) {
+                $payload['meta'] = json_encode([
+                    'from_stage_id' => $oldStageId,
+                    'to_stage_id'   => $stage->id,
+                ]);
+            }
+
+            DealActivity::create($payload);
+
+            return response()->json([
+                'ok' => true,
+                'deal_id' => $deal->id,
+                'stage_id' => $stage->id,
+                'stage_name' => $stage->name,
+            ]);
+        });
+    }
 }
 
 

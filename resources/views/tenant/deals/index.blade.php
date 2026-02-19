@@ -35,9 +35,11 @@
                     class="btn btn-outline-secondary">
                     Kanban view
                 </a>
-                <a href="{{ tenant_route('tenant.deals.create', ['tenant' => $tenant->subdomain]) }}" class="btn btn-primary">
-                    + Add Deal
-                </a>
+                @can('create', \App\Models\Deal::class)
+                    <a href="{{ tenant_route('tenant.deals.create', ['tenant' => $tenant->subdomain]) }}" class="btn btn-primary">
+                        + Add Deal
+                    </a>
+                @endcan
             </div>
         </div>
 
@@ -134,10 +136,12 @@
                                         href="{{ tenant_route('tenant.deals.show', ['deal' => $deal->id]) }}">
                                         View
                                     </a>
-                                    <a class="btn btn-sm btn-outline-secondary"
-                                        href="{{ tenant_route('tenant.deals.edit', ['deal' => $deal->id]) }}">
-                                        Edit
-                                    </a>
+                                    @can('update', $deal)
+                                        <a class="btn btn-sm btn-outline-secondary"
+                                            href="{{ tenant_route('tenant.deals.edit', ['deal' => $deal->id]) }}">
+                                            Edit
+                                        </a>
+                                    @endcan
                                 </td>
                             </tr>
                         @empty

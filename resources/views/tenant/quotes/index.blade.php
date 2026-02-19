@@ -10,20 +10,26 @@
             </div>
 
             <div class="d-flex gap-2">
-                <a href="{{ tenant_route('tenant.quotes.create') }}" class="btn btn-primary">+ New Quote</a>
+                @can('create', \App\Models\Quote::class)
+                    <a href="{{ tenant_route('tenant.quotes.create') }}" class="btn btn-primary">+ New Quote</a>
+                @endcan
 
                 @php $qs = http_build_query(request()->query()); @endphp
 
                 @if (tenant_feature($tenant, 'export'))
-                    <a href="{{ tenant_route('tenant.quotes.export') }}{{ $qs ? '?' . $qs : '' }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel)
-                    </a>
+                    @can('export', \App\Models\Quote::class)
+                        <a href="{{ tenant_route('tenant.quotes.export') }}{{ $qs ? '?' . $qs : '' }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel)
+                        </a>
+                    @endcan
                 @else
-                    <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
-                        class="btn btn-outline-secondary">
-                        Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                    </a>
+                    @can('export', \App\Models\Quote::class)
+                        <a href="{{ tenant_route('tenant.billing.upgrade', ['tenant' => $tenant->subdomain]) }}"
+                            class="btn btn-outline-secondary">
+                            Export (Excel) <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
+                        </a>
+                    @endcan
                 @endif
             </div>
         </div>
@@ -204,16 +210,20 @@
 
                                         <ul class="dropdown-menu dropdown-menu-end">
                                             <li>
-                                                <a class="dropdown-item"
-                                                    href="{{ tenant_route('tenant.quotes.edit', ['quote' => $qte->id]) }}">
-                                                    Edit
-                                                </a>
+                                                @can('update', $qte)
+                                                    <a class="dropdown-item"
+                                                        href="{{ tenant_route('tenant.quotes.edit', ['quote' => $qte->id]) }}">
+                                                        Edit
+                                                    </a>
+                                                @endcan
                                             </li>
                                             <li>
-                                                <a class="dropdown-item" target="_blank"
-                                                    href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $qte->id]) }}">
-                                                    PDF
-                                                </a>
+                                                @can('pdf', $qte)
+                                                    <a class="dropdown-item" target="_blank"
+                                                        href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $qte->id]) }}">
+                                                        PDF
+                                                    </a>
+                                                @endcan
                                             </li>
                                         </ul>
                                     </div>

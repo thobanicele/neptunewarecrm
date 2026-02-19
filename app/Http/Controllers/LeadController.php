@@ -14,6 +14,7 @@ class LeadController extends Controller
     public function index(Request $request, Tenant $tenant)
     {
         $tenant = app('tenant');
+        $this->authorize('leadsViewAny', Contact::class);
         $canExport = tenant_feature($tenant, 'export');
 
         $q     = trim((string) $request->query('q', ''));
@@ -59,6 +60,7 @@ class LeadController extends Controller
     public function kanban(Tenant $tenant)
     {
         $tenant = app('tenant');
+        $this->authorize('leadsViewAny', Contact::class);
 
         $leadStages = Contact::leadStages();
 
@@ -81,12 +83,14 @@ class LeadController extends Controller
     public function create(Tenant $tenant)
     {
         $tenant = app('tenant');
+        $this->authorize('leadsCreate', Contact::class);
         return view('tenant.leads.create', compact('tenant'));
     }
 
     public function store(Request $request, Tenant $tenant)
     {
         $tenant = app('tenant');
+        $this->authorize('leadsCreate', Contact::class);
 
         $data = $request->validate([
             'name'  => ['required','string','max:190'],
@@ -109,7 +113,7 @@ class LeadController extends Controller
     public function edit(Tenant $tenant, Contact $contact)
     {
         $tenant = app('tenant');
-
+        $this->authorize('leadsUpdate', Contact::class);
         abort_unless((int) $contact->tenant_id === (int) $tenant->id, 404);
         abort_unless($contact->lifecycle_stage === 'lead', 404);
 
@@ -125,7 +129,7 @@ class LeadController extends Controller
     public function update(Request $request, Tenant $tenant, Contact $contact)
     {
         $tenant = app('tenant');
-
+        $this->authorize('leadsUpdate', Contact::class);
         abort_unless((int) $contact->tenant_id === (int) $tenant->id, 404);
         abort_unless($contact->lifecycle_stage === 'lead', 404);
 
@@ -162,7 +166,7 @@ class LeadController extends Controller
     public function destroy(Tenant $tenant, Contact $contact)
     {
         $tenant = app('tenant');
-
+        $this->authorize('leadsDelete', Contact::class);
         abort_unless((int) $contact->tenant_id === (int) $tenant->id, 404);
         abort_unless($contact->lifecycle_stage === 'lead', 404);
 
@@ -175,6 +179,7 @@ class LeadController extends Controller
     public function export(Request $request, string $tenantKey): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         // ✅ Premium gate
         if (!tenant_feature($tenant, 'export')) {

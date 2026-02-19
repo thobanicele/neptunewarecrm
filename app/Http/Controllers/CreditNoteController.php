@@ -23,6 +23,9 @@ class CreditNoteController extends Controller
     public function index(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('viewAny', CreditNote::class);
+        $canExport = tenant_feature($tenant, 'export');
+
 
         $q = trim((string) $request->query('q', ''));
 
@@ -133,9 +136,9 @@ class CreditNoteController extends Controller
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
             ->get(['id','name']);
-
         return view('tenant.credit_notes.index', compact(
             'tenant',
+            'canExport',
             'creditNotes',
             'companies',
             'q',
@@ -149,6 +152,7 @@ class CreditNoteController extends Controller
     public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', CreditNote::class);
 
         $prefillCompanyId = $request->integer('company_id') ?: null;
         $prefillContactId = $request->integer('contact_id') ?: null;
@@ -195,6 +199,7 @@ class CreditNoteController extends Controller
    public function store(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
+        $this->authorize('create', CreditNote::class);
 
         $data = $request->validate([
             'company_id' => ['required','integer'],
@@ -329,6 +334,7 @@ class CreditNoteController extends Controller
     public function show(string $tenantKey, CreditNote $creditNote)
     {
         $tenant = app('tenant');
+        $this->authorize('view', $creditNote);
         abort_unless((int) $creditNote->tenant_id === (int) $tenant->id, 404);
 
         $creditNote->load([
@@ -482,6 +488,7 @@ class CreditNoteController extends Controller
     public function export(Request $request, string $tenantKey): StreamedResponse
     {
         $tenant = app('tenant');
+        abort_unless(auth()->user()->can('export.run'), 403);
 
         if (!tenant_feature($tenant, 'export')) {
             return back()->with('error', 'Export to Excel is available on the Premium plan.');

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Activity;
 use App\Support\TenantPlan;
+use Illuminate\Support\Facades\Gate;
 
 class AppServiceProvider extends ServiceProvider
 {   
@@ -31,6 +32,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::before(function ($user, $ability) {
+            return $user->hasRole('super_admin') ? true : null;
+        });
+
         Blade::if('feature', fn(string $f) => TenantPlan::currentFeature($f));
         Schema::defaultStringLength(191);
         View::composer('layouts.backend.part.sidebar', function ($view) {
