@@ -38,8 +38,8 @@
                         <div class="col-12 col-lg-6">
                             <div class="d-flex align-items-center gap-3">
                                 @if ($tenant->logo_path)
-                                    <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo"
-                                        style="height:56px;">
+                                    <img src="{{ Storage::disk(config('filesystems.tenant_logo_disk', 'tenant_logos'))->url($tenant->logo_path) }}"
+                                        alt="Logo">
                                 @else
                                     <div class="rounded bg-light border d-flex align-items-center justify-content-center"
                                         style="height:56px; width:56px;">
@@ -426,7 +426,7 @@
 
                 // keep any existing selection if user already chose one
                 const existingSelected = (selectedId || contactSelect.value || prefillContactId || '')
-                .toString();
+                    .toString();
 
                 contactSelect.innerHTML = `<option value="">Loading…</option>`;
 

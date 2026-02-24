@@ -9,7 +9,6 @@
                 {{ session('success') }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
-
             @push('scripts')
                 <script>
                     setTimeout(() => {
@@ -26,7 +25,6 @@
                 {{ session('error') }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
-
             @push('scripts')
                 <script>
                     setTimeout(() => {
@@ -39,23 +37,66 @@
         @endif
 
         @php
-            $currency = $paystack['currency'] ?? 'ZAR';
+            use App\Support\TenantPlan;
 
-            $monthly = $pricing['monthly'] ?? null;
-            $yearly = $pricing['yearly'] ?? null;
+            $plans = (array) config('plans.plans', []);
+            $pricing = (array) config('plans.billing.pricing', []);
+            $currency = (string) config('plans.billing.currency', 'ZAR');
+            $fmt = fn($amount) => $currency . ' ' . number_format((float) $amount, 2);
 
-            $isPremium = ($tenant->plan ?? 'free') === 'premium' || ($sub->plan ?? 'free') === 'premium';
+            // ✅ trial-aware effective plan key
+            $effectivePlanKey = $tenant
+                ? TenantPlan::effectivePlan($tenant)
+                : $tenant->plan ?? config('plans.default_plan', 'free');
 
-            $trialLabel = null;
-            if ($trialEnabled) {
-                if (!is_null($trialDaysLeft)) {
-                    $trialLabel = $trialDaysLeft > 0 ? "Trial: {$trialDaysLeft} days left" : 'Trial ended';
+            // Exclude internal plans
+            $publicPlans = collect($plans)
+                ->reject(fn($cfg, $key) => str_starts_with((string) $key, 'internal_'))
+                ->all();
+
+            // ✅ Trial UI (clean integer days; no decimals)
+            $trialEnabled = (bool) data_get(config('plans.trial'), 'enabled', false);
+            $trialDays = (int) data_get(config('plans.trial'), 'days', 14);
+
+            $trialEndsAt = $sub?->trial_ends_at ?? null;
+
+            $trialState = null; // active | ended | eligible
+            $trialDaysLeft = null;
+            $trialEndsDate = null;
+
+            if ($trialEnabled && $trialEndsAt) {
+                $trialEndsDate = optional($trialEndsAt)->format('Y-m-d');
+
+                if (now()->lt($trialEndsAt)) {
+                    $trialState = 'active';
+
+                    // ✅ whole integer days left, friendly for end-of-day
+                    $trialDaysLeft = now()->startOfDay()->diffInDays($trialEndsAt->startOfDay());
+                    $trialDaysLeft = max(1, (int) $trialDaysLeft);
                 } else {
-                    $trialLabel = "Includes {$trialDays}-day trial (if eligible)";
+                    $trialState = 'ended';
                 }
+            } elseif ($trialEnabled) {
+                $trialState = 'eligible';
             }
 
-            $fmt = fn($amount) => $currency . ' ' . number_format((float) $amount, 2);
+            $currentPlanLabel = data_get(
+                $plans,
+                "{$effectivePlanKey}.label",
+                ucfirst(str_replace('_', ' ', $effectivePlanKey)),
+            );
+
+            // Paystack codes (premium + business)
+            $psPremiumMonthly = (string) data_get(config('plans.billing.paystack'), 'premium_monthly_plan_code', '');
+            $psPremiumYearly = (string) data_get(config('plans.billing.paystack'), 'premium_yearly_plan_code', '');
+            $psBusinessMonthly = (string) data_get(config('plans.billing.paystack'), 'business_monthly_plan_code', '');
+            $psBusinessYearly = (string) data_get(config('plans.billing.paystack'), 'business_yearly_plan_code', '');
+
+            $paystackConfigured =
+                !empty($psPremiumMonthly) ||
+                !empty($psPremiumYearly) ||
+                !empty($psBusinessMonthly) ||
+                !empty($psBusinessYearly);
         @endphp
 
         <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
@@ -82,141 +123,166 @@
                     <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
                             <div class="text-muted small">Current plan</div>
-                            <div class="fs-5 fw-semibold text-capitalize">{{ $tenant->plan ?? 'free' }}</div>
+                            <div class="fs-5 fw-semibold text-capitalize">{{ $currentPlanLabel }}</div>
 
-                            @if (!$isPremium)
+                            {{-- ✅ Trial badge (clean) --}}
+                            @if ($trialState === 'active')
+                                <div class="mt-2">
+                                    <span class="badge bg-warning text-dark border">
+                                        Trial ends {{ $trialEndsDate }} • {{ $trialDaysLeft }}
+                                        day{{ $trialDaysLeft === 1 ? '' : 's' }} left
+                                    </span>
+                                </div>
+                            @elseif ($trialState === 'ended')
+                                <div class="mt-2">
+                                    <span class="badge bg-light text-dark border">
+                                        Trial ended {{ $trialEndsDate }}
+                                    </span>
+                                </div>
+                            @elseif ($trialState === 'eligible')
+                                <div class="mt-2">
+                                    <span class="badge bg-light text-dark border">
+                                        Includes {{ $trialDays }}-day trial (if eligible)
+                                    </span>
+                                </div>
+                            @endif
+
+                            @if ($effectivePlanKey === 'free')
                                 <div class="text-muted small mt-1">
-                                    Free plan limits deals to {{ data_get(config('plans.plans.free.deals'), 'max', 25) }}.
+                                    Free plan limits deals to {{ (int) data_get($plans, 'free.deals.max', 25) }}.
                                 </div>
                             @else
                                 <div class="text-muted small mt-1">
-                                    You’re on Premium — enjoy the full feature set.
-                                </div>
-                            @endif
-
-                            @if ($trialEnabled)
-                                <div class="mt-2">
-                                    <span class="badge bg-light text-dark">{{ $trialLabel }}</span>
+                                    You’re on {{ $currentPlanLabel }} — enjoy the feature set.
                                 </div>
                             @endif
                         </div>
 
-                        @if ($isPremium)
-                            <span class="badge rounded-pill text-bg-success">PREMIUM</span>
-                        @else
-                            <span class="badge rounded-pill text-bg-secondary">FREE</span>
-                        @endif
+                        <span
+                            class="badge rounded-pill {{ $effectivePlanKey === 'free' ? 'text-bg-secondary' : 'text-bg-success' }}">
+                            {{ strtoupper($effectivePlanKey) }}
+                        </span>
                     </div>
                 </div>
             </div>
 
-            {{-- Plans --}}
-            <div class="col-12 col-lg-6">
-                <div class="card h-100">
-                    <div class="card-body">
+            {{-- Plans list (all public plans) --}}
+            @foreach ($publicPlans as $planKey => $cfg)
+                @php
+                    $label = data_get($cfg, 'label', ucfirst(str_replace('_', ' ', $planKey)));
 
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h5 class="mb-1">{{ data_get($monthly, 'label', 'Premium Monthly') }}</h5>
-                                <div class="text-muted small">
-                                    Billed monthly
-                                    @if ($trialEnabled)
-                                        • {{ $trialLabel }}
-                                    @endif
+                    $pMonthly = data_get($pricing, "{$planKey}.monthly", null);
+                    $pYearly = data_get($pricing, "{$planKey}.yearly", null);
+
+                    $isCurrent = (string) $effectivePlanKey === (string) $planKey;
+
+                    // ✅ Feature list (prefer features_ui if you add it; fallback to enabled feature flags)
+                    $features = (array) data_get($cfg, 'features_ui', []);
+                    if (empty($features)) {
+                        $enabled = collect((array) data_get($cfg, 'features', []))
+                            ->filter(fn($v) => (bool) $v)
+                            ->keys()
+                            ->map(fn($k) => ucfirst(str_replace('_', ' ', $k)))
+                            ->values()
+                            ->all();
+
+                        $features = array_slice($enabled, 0, 10);
+                    }
+
+                    // ✅ Purchasable plans: Premium + Business
+                    $canBuy = in_array($planKey, ['premium', 'business'], true);
+                @endphp
+
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100 {{ $isCurrent ? 'border-dark' : '' }}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h5 class="mb-1">{{ $label }}</h5>
+                                    <div class="text-muted small">
+                                        @if ($isCurrent && $trialState === 'active')
+                                            Trial ends {{ $trialEndsDate }} • {{ $trialDaysLeft }}
+                                            day{{ $trialDaysLeft === 1 ? '' : 's' }} left
+                                        @else
+                                            Plan: <code>{{ $planKey }}</code>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                @if ($isCurrent)
+                                    <span class="badge text-bg-success">CURRENT</span>
+                                @else
+                                    <span class="badge text-bg-light text-dark border">{{ strtoupper($planKey) }}</span>
+                                @endif
+                            </div>
+
+                            <div class="mt-3">
+                                <div class="d-flex gap-3 flex-wrap">
+                                    <div>
+                                        <div class="text-muted small">Monthly</div>
+                                        <div class="fs-5 fw-semibold">
+                                            {{ $pMonthly ? $fmt(data_get($pMonthly, 'amount')) : '—' }}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="text-muted small">Yearly</div>
+                                        <div class="fs-5 fw-semibold">
+                                            {{ $pYearly ? $fmt(data_get($pYearly, 'amount')) : '—' }}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <span class="badge text-bg-primary">MONTHLY</span>
+
+                            <hr>
+
+                            {{-- ✅ Feature list --}}
+                            @if (!empty($features))
+                                <ul class="mb-4">
+                                    @foreach ($features as $f)
+                                        <li>{{ $f }}</li>
+                                    @endforeach
+                                </ul>
+                            @else
+                                <div class="text-muted small mb-4">No feature list configured.</div>
+                            @endif
+
+                            @if ($isCurrent)
+                                <button class="btn btn-secondary w-100" disabled>You’re on this plan</button>
+                            @else
+                                @if ($canBuy)
+                                    <div class="d-grid gap-2">
+                                        {{-- NOTE: add 'plan' field; controller must accept it --}}
+                                        <form method="POST"
+                                            action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
+                                            @csrf
+                                            <input type="hidden" name="plan" value="{{ $planKey }}">
+                                            <input type="hidden" name="cycle" value="monthly">
+                                            <button class="btn btn-primary w-100">Upgrade (Monthly)</button>
+                                        </form>
+
+                                        <form method="POST"
+                                            action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
+                                            @csrf
+                                            <input type="hidden" name="plan" value="{{ $planKey }}">
+                                            <input type="hidden" name="cycle" value="yearly">
+                                            <button class="btn btn-outline-primary w-100">Upgrade (Yearly)</button>
+                                        </form>
+
+                                        <div class="text-muted small">
+                                            You’ll be redirected to Paystack to complete payment.
+                                        </div>
+                                    </div>
+                                @else
+                                    <button class="btn btn-outline-secondary w-100" disabled>Not purchasable yet</button>
+                                    <div class="text-muted small mt-2">
+                                        This plan is currently assigned manually.
+                                    </div>
+                                @endif
+                            @endif
                         </div>
-
-                        <div class="mt-3">
-                            <div class="display-6 fw-semibold mb-0">
-                                {{ $monthly ? $fmt($monthly['amount']) : '—' }}
-                            </div>
-                            <div class="text-muted small">per month</div>
-                        </div>
-
-                        <hr>
-
-                        <ul class="mb-4">
-                            <li>Unlimited deals</li>
-                            <li>Exports (Excel)</li>
-                            <li>Invoice email sending</li>
-                            <li>Dashboards & reports</li>
-                        </ul>
-
-                        @if ($isPremium)
-                            <button class="btn btn-secondary w-100" disabled>
-                                You’re already Premium
-                            </button>
-                        @else
-                            <form method="POST" action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
-                                @csrf
-                                <input type="hidden" name="cycle" value="monthly">
-                                <button class="btn btn-primary w-100">
-                                    Upgrade (Monthly)
-                                </button>
-                            </form>
-                            <div class="text-muted small mt-2">
-                                You’ll be redirected to Paystack to complete payment.
-                            </div>
-                        @endif
-
                     </div>
                 </div>
-            </div>
-
-            <div class="col-12 col-lg-6">
-                <div class="card h-100 border-dark">
-                    <div class="card-body">
-
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h5 class="mb-1">{{ data_get($yearly, 'label', 'Premium Yearly') }}</h5>
-                                <div class="text-muted small">
-                                    Billed yearly
-                                    @if ($trialEnabled)
-                                        • {{ $trialLabel }}
-                                    @endif
-                                </div>
-                            </div>
-                            <span class="badge text-bg-dark">YEARLY</span>
-                        </div>
-
-                        <div class="mt-3">
-                            <div class="display-6 fw-semibold mb-0">
-                                {{ $yearly ? $fmt($yearly['amount']) : '—' }}
-                            </div>
-                            <div class="text-muted small">per year</div>
-                        </div>
-
-                        <hr>
-
-                        <ul class="mb-4">
-                            <li>Everything in Monthly</li>
-                            <li>Best value for teams</li>
-                            <li>Less admin work</li>
-                        </ul>
-
-                        @if ($isPremium)
-                            <button class="btn btn-secondary w-100" disabled>
-                                You’re already Premium
-                            </button>
-                        @else
-                            <form method="POST" action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
-                                @csrf
-                                <input type="hidden" name="cycle" value="yearly">
-                                <button class="btn btn-outline-primary w-100">
-                                    Upgrade (Yearly)
-                                </button>
-                            </form>
-                            <div class="text-muted small mt-2">
-                                You’ll be redirected to Paystack to complete payment.
-                            </div>
-                        @endif
-
-                    </div>
-                </div>
-            </div>
+            @endforeach
 
             {{-- Notes --}}
             <div class="col-12">
@@ -232,14 +298,14 @@
                             <li>You can cancel anytime; access continues until the end of the paid period.</li>
                         </ul>
 
-                        @if (!empty($paystack['monthly_plan_code']) || !empty($paystack['yearly_plan_code']))
+                        @if ($paystackConfigured)
                             <div class="text-muted small mt-3">
-                                <span class="badge bg-light text-dark">Paystack plans configured</span>
+                                <span class="badge bg-light text-dark border">Paystack plans configured</span>
                             </div>
                         @else
                             <div class="text-muted small mt-3">
                                 <span class="badge bg-warning text-dark">Paystack plan codes missing</span>
-                                <span class="ms-2">Add plan codes in your config/env so recurring subscriptions
+                                <span class="ms-2">Add plan codes in your env/config so recurring subscriptions
                                     work.</span>
                             </div>
                         @endif

@@ -21,6 +21,7 @@
 
     {{-- AdminKit CSS --}}
     <link href="{{ asset('asset/css/app.css') }}" rel="stylesheet">
+    <link href="{{ asset('asset/css/back_end_custom.css') }}" rel="stylesheet">
 
     {{-- Fonts --}}
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">

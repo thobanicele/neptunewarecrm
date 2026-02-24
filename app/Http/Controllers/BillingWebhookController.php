@@ -1,8 +1,8 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use App\Models\Subscription;
 use App\Models\Tenant;
 
@@ -18,22 +18,30 @@ class BillingWebhookController extends Controller
             return response()->json(['ok' => false], 401);
         }
 
-        $event = $request->input('event');
-        $data  = $request->input('data', []);
+        $event = (string) $request->input('event', '');
+        $data  = (array) $request->input('data', []);
 
-        // helpful tenant id passed in metadata during initialize
-        $tenantId = data_get($data, 'metadata.tenant_id');
+        $tenantId = (int) data_get($data, 'metadata.tenant_id', 0);
+
+        // ✅ plan + cycle from metadata (support premium + business)
+        $plan = (string) data_get($data, 'metadata.plan', 'premium');
+        if (!in_array($plan, ['premium', 'business'], true)) $plan = 'premium';
+
+        $cycle = (string) data_get($data, 'metadata.cycle', 'monthly');
+        if (!in_array($cycle, ['monthly', 'yearly'], true)) $cycle = 'monthly';
 
         if ($event === 'charge.success') {
             if ($tenantId) {
                 $sub = Subscription::firstOrCreate(['tenant_id' => $tenantId], [
                     'provider' => 'paystack',
-                    'plan' => 'premium',
-                    'cycle' => data_get($data, 'metadata.cycle', 'monthly'),
+                    'plan' => $plan,
+                    'cycle' => $cycle,
                     'status' => 'active',
                 ]);
 
                 $sub->status = 'active';
+                $sub->plan = $plan;
+                $sub->cycle = $cycle;
                 $sub->paystack_customer_code = data_get($data, 'customer.customer_code');
                 $sub->authorization_code = data_get($data, 'authorization.authorization_code');
                 $sub->authorization_signature = data_get($data, 'authorization.signature');
@@ -42,7 +50,7 @@ class BillingWebhookController extends Controller
                 ]);
                 $sub->save();
 
-                Tenant::where('id', $tenantId)->update(['plan' => 'premium']);
+                Tenant::where('id', $tenantId)->update(['plan' => $plan]);
             }
         }
 
@@ -50,11 +58,13 @@ class BillingWebhookController extends Controller
             if ($tenantId) {
                 $sub = Subscription::firstOrCreate(['tenant_id' => $tenantId], [
                     'provider' => 'paystack',
-                    'plan' => 'premium',
-                    'cycle' => data_get($data, 'metadata.cycle', 'monthly'),
+                    'plan' => $plan,
+                    'cycle' => $cycle,
                     'status' => 'active',
                 ]);
 
+                $sub->plan = $plan;
+                $sub->cycle = $cycle;
                 $sub->paystack_subscription_code = data_get($data, 'subscription_code');
                 $sub->paystack_email_token = data_get($data, 'email_token');
                 $sub->status = 'active';
@@ -63,7 +73,6 @@ class BillingWebhookController extends Controller
         }
 
         // You can handle: subscription.disable, invoice.payment_failed, etc later
-
         return response()->json(['ok' => true]);
     }
 }

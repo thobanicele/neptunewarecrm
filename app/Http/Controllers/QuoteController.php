@@ -14,14 +14,14 @@ use App\Models\TaxType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\ActivityLogger;
 
 class QuoteController extends Controller
 {
-
     public function index(string $tenantKey, Request $request)
     {
         $tenant = app('tenant');
-        $this ->authorize('viewAny', Quote::class);
+        $this->authorize('viewAny', Quote::class);
 
         $q = trim((string) $request->query('q', ''));
         $status = $request->query('status');
@@ -87,8 +87,8 @@ class QuoteController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // Pro-only export feature flag (adjust key to your actual feature name)
-        $canExport = tenant_feature($tenant, 'exports_excel');
+        // Feature flag (make sure key matches your plan config)
+        $canExport = tenant_feature($tenant, 'export');
 
         return view('tenant.quotes.index', compact(
             'tenant',
@@ -103,17 +103,16 @@ class QuoteController extends Controller
         ));
     }
 
-
     public function create(Request $request, string $tenantKey)
     {
         $tenant = app('tenant');
         $this->authorize('create', Quote::class);
 
-        // ✅ Prefill from query string
+        // Prefill from query string
         $prefillCompanyId = $request->integer('company_id') ?: null;
         $prefillContactId = $request->integer('contact_id') ?: null;
 
-        // ✅ Validate prefilled company belongs to this tenant
+        // Validate prefilled company belongs to this tenant
         if ($prefillCompanyId) {
             $ok = Company::query()
                 ->where('tenant_id', $tenant->id)
@@ -126,7 +125,7 @@ class QuoteController extends Controller
             }
         }
 
-        // ✅ Validate prefilled contact belongs to tenant (+ optionally company if column exists)
+        // Validate prefilled contact belongs to tenant (+ optionally company if column exists)
         if ($prefillContactId) {
             $ok = Contact::query()
                 ->where('tenant_id', $tenant->id)
@@ -142,7 +141,7 @@ class QuoteController extends Controller
             }
         }
 
-        // ✅ If company is prefilled but contact is not, auto-pick first contact for that company (if possible)
+        // If company is prefilled but contact is not, auto-pick first contact for that company (if possible)
         if ($prefillCompanyId && !$prefillContactId && $this->schema_has_column('contacts', 'company_id')) {
             $prefillContactId = Contact::query()
                 ->where('tenant_id', $tenant->id)
@@ -150,25 +149,25 @@ class QuoteController extends Controller
                 ->orderBy('name')
                 ->value('id');
         }
+
         $products = Product::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
-            ->get(['id','name','sku','description','unit_rate']); // or your actual columns
+            ->get(['id', 'name', 'sku', 'description', 'unit_rate']);
 
         $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
-            ->get(['id','name','rate']);
+            ->get(['id', 'name', 'rate']);
 
         $defaultTaxTypeId = $taxTypes->first()?->id;
 
         $deals = Deal::query()
             ->where('tenant_id', $tenant->id)
             ->latest()
-            ->get(['id','title']);
+            ->get(['id', 'title']);
 
-
-        // --- Companies (+ address snapshots for the create screen) ---
+        // Companies (+ address snapshots for the create screen)
         $companies = Company::query()
             ->where('tenant_id', $tenant->id)
             ->with(['addresses.country', 'addresses.subdivision'])
@@ -200,13 +199,11 @@ class QuoteController extends Controller
             ];
         })->keyBy('id');
 
-        // ✅ Sales people list (THIS is what your blade expects)
         $salesPeople = User::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // ✅ Contacts list (filtered if company is prefilled + contacts.company_id exists)
         $contacts = Contact::query()
             ->where('tenant_id', $tenant->id)
             ->when(
@@ -216,25 +213,20 @@ class QuoteController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // keep your existing $deals/$taxTypes/$defaultTaxTypeId/$products etc.
-        // ...
-
         return view('tenant.quotes.create', compact(
             'tenant',
             'companies',
             'companiesJson',
             'contacts',
-            'salesPeople',          // ✅ PASS TO VIEW
+            'salesPeople',
             'prefillCompanyId',
             'prefillContactId',
             'deals',
             'taxTypes',
             'defaultTaxTypeId',
             'products',
-            // ... include the rest you already had (deals, taxTypes, defaultTaxTypeId, products, etc.)
         ));
     }
-
 
     /**
      * Safe schema check (so you can run even if contacts.company_id doesn't exist yet)
@@ -242,13 +234,11 @@ class QuoteController extends Controller
     private function schema_has_column(string $table, string $col): bool
     {
         try {
-            return \Illuminate\Support\Facades\Schema::hasColumn($table, $col);
+            return Schema::hasColumn($table, $col);
         } catch (\Throwable $e) {
             return false;
         }
     }
-
-
 
     public function store(string $tenantKey, Request $request)
     {
@@ -442,8 +432,8 @@ class QuoteController extends Controller
                 'customer_reference' => $data['customer_reference'] ?? null,
 
                 'tax_rate'   => $effectiveRate,
-                'subtotal'   => $subtotalGross,      // gross subtotal
-                'discount_amount' => $discountTotal, // header discount total
+                'subtotal'   => $subtotalGross,
+                'discount_amount' => $discountTotal,
                 'tax_amount' => $taxTotal,
                 'total'      => $total,
 
@@ -454,6 +444,10 @@ class QuoteController extends Controller
             foreach ($snapshotItems as $item) {
                 $quote->items()->create($item);
             }
+
+            app(ActivityLogger::class)->log($tenant->id, 'quote.created', $quote, [
+                'quote_number' => $quote->quote_number,
+            ]);
 
             return redirect()
                 ->to(tenant_route('tenant.quotes.show', ['quote' => $quote->id]))
@@ -474,6 +468,7 @@ class QuoteController extends Controller
             'contact',
             'salesPerson',
             'owner',
+            'activityLogs.user',
         ]);
 
         $billing = $quote->company?->addresses
@@ -624,7 +619,6 @@ class QuoteController extends Controller
             'items.*.discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
-        // Tenant safety (header)
         if (!empty($data['deal_id']))    Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
         if (!empty($data['company_id'])) Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
         if (!empty($data['contact_id'])) Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
@@ -632,7 +626,6 @@ class QuoteController extends Controller
 
         return DB::transaction(function () use ($tenant, $quote, $data) {
 
-            // Products
             $productIds = collect($data['items'])
                 ->pluck('product_id')->filter()->unique()
                 ->map(fn ($id) => (int) $id)->values();
@@ -648,7 +641,6 @@ class QuoteController extends Controller
                 if ($productsById->count() !== $productIds->count()) abort(404);
             }
 
-            // Tax types
             $defaultTaxTypeId = !empty($data['tax_type_id']) ? (int) $data['tax_type_id'] : null;
 
             $taxTypeIds = collect($data['items'])
@@ -743,7 +735,7 @@ class QuoteController extends Controller
                     'discount_pct'    => $discountPct,
                     'discount_amount' => $discAmt,
 
-                    'line_total'  => $netLine, // net excl VAT
+                    'line_total'  => $netLine,
 
                     'tax_name'    => $taxName,
                     'tax_rate'    => $taxRate,
@@ -783,15 +775,139 @@ class QuoteController extends Controller
                 'terms' => $data['terms'] ?? null,
             ]);
 
-            // replace items
             $quote->items()->delete();
             foreach ($snapshotItems as $item) {
                 $quote->items()->create($item);
             }
 
+            app(ActivityLogger::class)->log($tenant->id, 'quote.updated', $quote, [
+                'quote_number' => $quote->quote_number,
+            ]);
+
             return redirect()
                 ->to(tenant_route('tenant.quotes.show', ['quote' => $quote->id]))
                 ->with('success', 'Quote updated.');
+        });
+    }
+
+    /**
+     * Status actions (logged)
+     */
+    public function markSent(string $tenantKey, Quote $quote)
+    {
+        $tenant = app('tenant');
+        $this->authorize('update', $quote);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
+
+        $current = strtolower((string) $quote->status);
+
+        if ($current !== 'draft') {
+            return back()->with('error', 'Only draft quotes can be marked as sent.');
+        }
+
+        return DB::transaction(function () use ($tenant, $quote, $current) {
+            $quote->forceFill([
+                'status'      => 'sent',
+                'sent_at'     => now(),
+                'accepted_at' => null,
+                'declined_at' => null,
+            ])->save();
+
+            app(ActivityLogger::class)->log($tenant->id, 'quote.status_changed', $quote, [
+                'quote_number' => $quote->quote_number,
+                'from' => $current,
+                'to'   => 'sent',
+            ]);
+
+            return back()->with('success', 'Quote marked as sent.');
+        });
+    }
+
+    public function accept(string $tenantKey, Quote $quote)
+    {
+        $tenant = app('tenant');
+        $this->authorize('update', $quote);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
+
+        $current = strtolower((string) $quote->status);
+
+        if (!in_array($current, ['draft', 'sent'], true)) {
+            return back()->with('error', 'Only draft or sent quotes can be accepted.');
+        }
+
+        return DB::transaction(function () use ($tenant, $quote, $current) {
+            $quote->forceFill([
+                'status'      => 'accepted',
+                'accepted_at' => now(),
+                'declined_at' => null,
+            ])->save();
+
+            app(ActivityLogger::class)->log($tenant->id, 'quote.status_changed', $quote, [
+                'quote_number' => $quote->quote_number,
+                'from' => $current,
+                'to'   => 'accepted',
+            ]);
+
+            return back()->with('success', 'Quote marked as accepted.');
+        });
+    }
+
+    public function decline(string $tenantKey, Quote $quote)
+    {
+        $tenant = app('tenant');
+        $this->authorize('update', $quote);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
+
+        $current = strtolower((string) $quote->status);
+
+        if (!in_array($current, ['draft', 'sent'], true)) {
+            return back()->with('error', 'Only draft or sent quotes can be declined.');
+        }
+
+        return DB::transaction(function () use ($tenant, $quote, $current) {
+            $quote->forceFill([
+                'status'      => 'declined',
+                'declined_at' => now(),
+                'accepted_at' => null,
+            ])->save();
+
+            app(ActivityLogger::class)->log($tenant->id, 'quote.status_changed', $quote, [
+                'quote_number' => $quote->quote_number,
+                'from' => $current,
+                'to'   => 'declined',
+            ]);
+
+            return back()->with('success', 'Quote marked as declined.');
+        });
+    }
+
+    public function reopen(string $tenantKey, Quote $quote)
+    {
+        $tenant = app('tenant');
+        $this->authorize('update', $quote);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
+
+        $current = strtolower((string) $quote->status);
+
+        if (!in_array($current, ['accepted', 'declined'], true)) {
+            return back()->with('error', 'Only accepted or declined quotes can be reopened.');
+        }
+
+        return DB::transaction(function () use ($tenant, $quote, $current) {
+            $quote->forceFill([
+                'status'      => 'sent',
+                'sent_at'     => $quote->sent_at ?: now(),
+                'accepted_at' => null,
+                'declined_at' => null,
+            ])->save();
+
+            app(ActivityLogger::class)->log($tenant->id, 'quote.status_changed', $quote, [
+                'quote_number' => $quote->quote_number,
+                'from' => $current,
+                'to'   => 'sent',
+            ]);
+
+            return back()->with('success', 'Quote reopened and set back to Sent.');
         });
     }
 
@@ -829,29 +945,27 @@ class QuoteController extends Controller
             ->first();
 
         if ($existing) {
-           return redirect()
-            ->to(tenant_route('tenant.invoices.show', ['invoice' => $existing->id]))
-            ->with('success', 'An invoice already exists for this quote. Redirected to the invoice.');
-
+            return redirect()
+                ->to(tenant_route('tenant.invoices.show', ['invoice' => $existing->id]))
+                ->with('success', 'An invoice already exists for this quote. Redirected to the invoice.');
         }
 
         return DB::transaction(function () use ($tenant, $quote) {
 
             $invoiceNumber = $this->generateInvoiceNumber($tenant->id);
 
-            // Copy header totals (your quote now stores gross subtotal + discount separately)
             $subtotal       = (float) ($quote->subtotal ?? 0);
             $discountAmount = (float) ($quote->discount_amount ?? 0);
             $taxAmount      = (float) ($quote->tax_amount ?? 0);
             $total          = (float) ($quote->total ?? 0);
             $taxRate        = (float) ($quote->tax_rate ?? 0);
 
-            $reference = $quote->quote_number; // editable later on Invoice edit screen
+            $reference = $quote->quote_number;
 
             $invoice = Invoice::create([
                 'tenant_id' => $tenant->id,
 
-                'invoice_number' => $invoiceNumber, // ✅ REQUIRED
+                'invoice_number' => $invoiceNumber,
                 'quote_id'     => $quote->id,
                 'quote_number' => $quote->quote_number,
                 'reference'    => $reference,
@@ -879,6 +993,18 @@ class QuoteController extends Controller
                 'terms' => $quote->terms,
             ]);
 
+            app(ActivityLogger::class)->log($tenant->id, 'quote.converted_to_invoice', $quote, [
+                'quote_number' => $quote->quote_number,
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+            ]);
+
+            app(ActivityLogger::class)->log($tenant->id, 'invoice.created_from_quote', $invoice, [
+                'invoice_number' => $invoice->invoice_number,
+                'quote_id' => $quote->id,
+                'quote_number' => $quote->quote_number,
+            ]);
+
             foreach ($quote->items as $it) {
                 $invoice->items()->create([
                     'tenant_id'   => $tenant->id,
@@ -901,31 +1027,22 @@ class QuoteController extends Controller
                     'tax_name'    => $it->tax_name ?? null,
                     'tax_rate'    => (float) ($it->tax_rate ?? 0),
 
-                    'line_total'  => (float) $it->line_total, // net excl VAT
+                    'line_total'  => (float) $it->line_total,
                     'tax_amount'  => (float) $it->tax_amount,
                 ]);
             }
 
-            // Link back to quote ONLY IF those columns exist
             if (Schema::hasColumn('quotes', 'invoice_id')) {
-                $quote->forceFill([
-                    'invoice_id' => $invoice->id,
-                ]);
+                $quote->forceFill(['invoice_id' => $invoice->id]);
             }
             if (Schema::hasColumn('quotes', 'invoice_number')) {
-                $quote->forceFill([
-                    'invoice_number' => $invoice->invoice_number,
-                ]);
+                $quote->forceFill(['invoice_number' => $invoice->invoice_number]);
             }
             if (Schema::hasColumn('quotes', 'invoiced_at')) {
-                $quote->forceFill([
-                    'invoiced_at' => now(),
-                ]);
+                $quote->forceFill(['invoiced_at' => now()]);
             }
             if (Schema::hasColumn('quotes', 'invoicing_status')) {
-                $quote->forceFill([
-                    'invoicing_status' => 'draft',
-                ]);
+                $quote->forceFill(['invoicing_status' => 'draft']);
             }
             if ($quote->isDirty()) {
                 $quote->save();
@@ -967,12 +1084,10 @@ class QuoteController extends Controller
 
     protected function generateInvoiceNumber(int $tenantId): string
     {
-        // Prefer your shared service if you have it
         if (class_exists(\App\Services\DocumentNumberService::class)) {
             return app(\App\Services\DocumentNumberService::class)->nextInvoiceNumber($tenantId);
         }
 
-        // Fallback (works, not perfect under concurrency)
         $next = (int) \App\Models\Invoice::where('tenant_id', $tenantId)->max('id') + 1;
 
         return 'INV-' . str_pad((string) $next, 6, '0', STR_PAD_LEFT);
@@ -987,21 +1102,20 @@ class QuoteController extends Controller
             return back()->with('error', 'Export to Excel is available on the Pro plan.');
         }
 
-        // Reuse the same filters the index uses
         $q = trim((string) $request->query('q', ''));
         $status = $request->query('status');
         $sales_person_user_id = $request->query('sales_person_user_id');
 
         $rows = Quote::query()
             ->where('tenant_id', $tenant->id)
-            ->with(['company','contact','salesPerson'])
+            ->with(['company', 'contact', 'salesPerson'])
             ->when($status, fn ($qry) => $qry->where('status', $status))
             ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
             ->when($q !== '', function ($qry) use ($q) {
                 $qry->where(function ($x) use ($q) {
                     $x->where('quote_number', 'like', "%{$q}%")
-                    ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
-                    ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+                        ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
+                        ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
                 });
             })
             ->orderByDesc('id')
@@ -1011,7 +1125,7 @@ class QuoteController extends Controller
 
         return response()->streamDownload(function () use ($rows) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Quote #','Company','Contact','Status','Subtotal','Total','Quoted Date','Sales Person']);
+            fputcsv($out, ['Quote #', 'Company', 'Contact', 'Status', 'Subtotal', 'Total', 'Quoted Date', 'Sales Person']);
 
             foreach ($rows as $qte) {
                 fputcsv($out, [
@@ -1019,8 +1133,8 @@ class QuoteController extends Controller
                     $qte->company?->name,
                     $qte->contact?->name,
                     $qte->status,
-                    number_format((float)$qte->subtotal, 2, '.', ''),
-                    number_format((float)$qte->total, 2, '.', ''),
+                    number_format((float) $qte->subtotal, 2, '.', ''),
+                    number_format((float) $qte->total, 2, '.', ''),
                     optional($qte->created_at)->format('Y-m-d'),
                     $qte->salesPerson?->name,
                 ]);
@@ -1030,7 +1144,4 @@ class QuoteController extends Controller
             'Content-Type' => 'text/csv',
         ]);
     }
-
-
-
 }

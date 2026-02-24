@@ -34,8 +34,8 @@
                         <div class="col-12 col-lg-6">
                             <div class="d-flex align-items-center gap-3">
                                 @if ($tenant->logo_path)
-                                    <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo"
-                                        style="height:56px;">
+                                    <img src="{{ Storage::disk(config('filesystems.tenant_logo_disk', 'tenant_logos'))->url($tenant->logo_path) }}"
+                                        alt="Logo">
                                 @else
                                     <div class="rounded bg-light border d-flex align-items-center justify-content-center"
                                         style="height:56px; width:56px;">
@@ -46,7 +46,30 @@
 
                                 <div>
                                     <div class="fw-semibold" style="font-size: 18px;">{{ $tenant->name }}</div>
-                                    <div class="text-muted small">Quote</div>
+
+                                    {{-- NEW: Tenant details under name --}}
+                                    @if (!empty($tenant->company_address))
+                                        <div class="text-muted small" style="white-space: pre-line; line-height: 1.25;">
+                                            {{ $tenant->company_address }}
+                                        </div>
+                                    @endif
+
+                                    <div class="text-muted small mt-1">
+                                        @php
+                                            $meta = collect([
+                                                !empty($tenant->vat_number) ? 'VAT: ' . $tenant->vat_number : null,
+                                                !empty($tenant->registration_number)
+                                                    ? 'Reg: ' . $tenant->registration_number
+                                                    : null,
+                                            ])
+                                                ->filter()
+                                                ->implode(' • ');
+                                        @endphp
+
+                                        @if ($meta)
+                                            <span>{{ $meta }}</span>
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
                         </div>

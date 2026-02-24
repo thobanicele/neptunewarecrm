@@ -9,7 +9,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rules;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
@@ -31,9 +33,40 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'cf-turnstile-response' => ['required', 'string'],
         ]);
+
+        $token = (string) $request->input('cf-turnstile-response');
+
+        // ✅ Turnstile verify (dev-friendly SSL handling)
+        $pending = Http::asForm()->timeout(8);
+
+        // Option B: dev-only quick unblock for Windows/WAMP SSL CA issues
+        if (!app()->environment('production')) {
+            $pending = $pending->withoutVerifying();
+        }
+
+        try {
+            $verify = $pending->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                'secret' => config('services.turnstile.secret_key'),
+                'response' => $token,
+                'remoteip' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'cf-turnstile-response' => 'Captcha service not reachable. Please try again.',
+            ]);
+        }
+
+        $ok = (bool) data_get($verify->json(), 'success', false);
+
+        if (!$ok) {
+            throw ValidationException::withMessages([
+                'cf-turnstile-response' => 'Captcha verification failed. Please try again.',
+            ]);
+        }
 
         $user = User::create([
             'name' => $request->name,
@@ -42,7 +75,6 @@ class RegisteredUserController extends Controller
         ]);
 
         event(new Registered($user));
-
         Auth::login($user);
 
         if (session()->has('invite_token')) {
@@ -54,6 +86,6 @@ class RegisteredUserController extends Controller
             return redirect()->route('tenant.invites.accept', ['token' => $token]);
         }
 
-        return redirect()->route('app.home');
+        return redirect()->route('verification.notice');
     }
 }

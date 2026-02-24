@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\TaxType;
+use App\Models\Brand;
+use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -29,11 +31,12 @@ class ProductController extends Controller
         if (!in_array($sort, $allowedSorts, true)) $sort = 'name';
 
         $query = Product::query()
+            ->with(['brand', 'category', 'taxType']) // ✅ eager-load for future index display
             ->where('tenant_id', $tenant->id)
             ->when($q !== '', function ($qry) use ($q) {
                 $qry->where(function ($x) use ($q) {
                     $x->where('sku', 'like', "%{$q}%")
-                    ->orWhere('name', 'like', "%{$q}%");
+                      ->orWhere('name', 'like', "%{$q}%");
                 });
             })
             ->when($status !== '', function ($qry) use ($status) {
@@ -57,7 +60,7 @@ class ProductController extends Controller
             ->orderBy('unit')
             ->pluck('unit');
 
-        $canExport = tenant_feature($tenant, 'export'); // matches your config key
+        $canExport = tenant_feature($tenant, 'export');
 
         return view('tenant.products.index', compact(
             'tenant','products','units','q','status','unit','sort','dir','canExport'
@@ -67,7 +70,18 @@ class ProductController extends Controller
     public function create(\App\Models\Tenant $tenant)
     {
         $tenant = app('tenant');
-            $this->authorize('create', Product::class);
+        $this->authorize('create', Product::class);
+
+        $brands = Brand::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $categories = Category::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
 
         $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
@@ -76,13 +90,13 @@ class ProductController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'rate', 'is_default']);
 
-        return view('tenant.products.create', compact('tenant', 'taxTypes'));
+        return view('tenant.products.create', compact('tenant', 'taxTypes', 'brands', 'categories'));
     }
 
     public function store(Request $request, \App\Models\Tenant $tenant)
     {
         $tenant = app('tenant');
-        $this->authorize('create', Product::class); 
+        $this->authorize('create', Product::class);
 
         $data = $request->validate([
             'sku' => [
@@ -93,6 +107,8 @@ class ProductController extends Controller
                 'required', 'string', 'max:190',
                 Rule::unique('products', 'name')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
             ],
+            'brand_id' => ['nullable', 'integer'],
+            'category_id' => ['nullable', 'integer'],
             'description' => ['nullable', 'string', 'max:255'],
             'unit_rate' => ['required', 'numeric', 'min:0'],
             'unit' => ['nullable', 'string', 'max:30'],
@@ -106,8 +122,20 @@ class ProductController extends Controller
             TaxType::where('tenant_id', $tenant->id)->findOrFail((int) $data['tax_type_id']);
         }
 
+        // ✅ Tenant safety for brand_id
+        if (!empty($data['brand_id'])) {
+            Brand::where('tenant_id', $tenant->id)->findOrFail((int) $data['brand_id']);
+        }
+
+        // ✅ Tenant safety for category_id
+        if (!empty($data['category_id'])) {
+            Category::where('tenant_id', $tenant->id)->findOrFail((int) $data['category_id']);
+        }
+
         Product::create([
             'tenant_id' => $tenant->id,
+            'brand_id' => $data['brand_id'] ?? null,
+            'category_id' => $data['category_id'] ?? null,
             'sku' => strtoupper(trim($data['sku'])),
             'name' => trim($data['name']),
             'description' => $data['description'] ?? null,
@@ -129,7 +157,7 @@ class ProductController extends Controller
         $this->authorize('view', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
-        $product->load('taxType');
+        $product->load(['taxType','brand','category']);
 
         return view('tenant.products.show', compact('tenant', 'product'));
     }
@@ -140,6 +168,17 @@ class ProductController extends Controller
         $this->authorize('update', $product);
         abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
 
+        $brands = Brand::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $categories = Category::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
         $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
             ->where('is_active', true)
@@ -147,7 +186,7 @@ class ProductController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'rate', 'is_default']);
 
-        return view('tenant.products.edit', compact('tenant', 'product', 'taxTypes'));
+        return view('tenant.products.edit', compact('tenant', 'product', 'taxTypes', 'brands', 'categories'));
     }
 
     public function update(Request $request, \App\Models\Tenant $tenant, Product $product)
@@ -169,6 +208,8 @@ class ProductController extends Controller
                     ->where(fn ($q) => $q->where('tenant_id', $tenant->id))
                     ->ignore($product->id),
             ],
+            'brand_id' => ['nullable', 'integer'],
+            'category_id' => ['nullable', 'integer'],
             'description' => ['nullable', 'string', 'max:255'],
             'unit_rate' => ['required', 'numeric', 'min:0'],
             'unit' => ['nullable', 'string', 'max:30'],
@@ -182,7 +223,19 @@ class ProductController extends Controller
             TaxType::where('tenant_id', $tenant->id)->findOrFail((int) $data['tax_type_id']);
         }
 
+        // ✅ Tenant safety for brand_id
+        if (!empty($data['brand_id'])) {
+            Brand::where('tenant_id', $tenant->id)->findOrFail((int) $data['brand_id']);
+        }
+
+        // ✅ Tenant safety for category_id
+        if (!empty($data['category_id'])) {
+            Category::where('tenant_id', $tenant->id)->findOrFail((int) $data['category_id']);
+        }
+
         $product->update([
+            'brand_id' => $data['brand_id'] ?? null,
+            'category_id' => $data['category_id'] ?? null,
             'sku' => strtoupper(trim($data['sku'])),
             'name' => trim($data['name']),
             'description' => $data['description'] ?? null,

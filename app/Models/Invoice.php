@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Invoice extends Model
 {
@@ -17,6 +18,7 @@ class Invoice extends Model
         'notes','terms',
         'billing_address_id','shipping_address_id',
         'billing_address_snapshot','shipping_address_snapshot',
+        'sales_order_id','sales_order_number',
     ];
 
     protected $casts = [
@@ -25,7 +27,6 @@ class Invoice extends Model
         'paid_at'   => 'datetime',
         'voided_at' => 'datetime',
 
-        // money/percent fields
         'subtotal'        => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'tax_rate'        => 'decimal:2',
@@ -43,6 +44,11 @@ class Invoice extends Model
         return $this->belongsTo(Quote::class);
     }
 
+    public function salesOrder()
+    {
+        return $this->belongsTo(\App\Models\SalesOrder::class, 'sales_order_id');
+    }
+
     public function company()
     {
         return $this->belongsTo(Company::class);
@@ -53,7 +59,6 @@ class Invoice extends Model
         return $this->belongsTo(Contact::class);
     }
 
-    // Optional convenience helpers
     public function isDraft(): bool  { return $this->status === 'draft'; }
     public function isIssued(): bool { return $this->status === 'issued'; }
     public function isPaid(): bool   { return $this->status === 'paid'; }
@@ -78,7 +83,6 @@ class Invoice extends Model
         return $this->belongsTo(\App\Models\Deal::class);
     }
 
-    // Invoice.php
     public function allocations()
     {
         return $this->hasMany(TransactionAllocation::class, 'invoice_id');
@@ -103,11 +107,8 @@ class Invoice extends Model
         return max(0, (float) $this->total - $this->paymentsAllocatedTotal() - $this->creditsAllocatedTotal());
     }
 
-
-
     public function getAllocatedAmountAttribute(): float
     {
-        // If eager-loaded, this avoids extra queries
         $sum = $this->relationLoaded('allocations')
             ? $this->allocations->sum('amount_applied')
             : $this->allocations()->sum('amount_applied');
@@ -127,6 +128,10 @@ class Invoice extends Model
         return 'unpaid';
     }
 
+    public function activityLogs(): MorphMany
+    {
+        return $this->morphMany(\App\Models\ActivityLog::class, 'subject')->latest();
+    }
 }
 
 

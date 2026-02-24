@@ -9,6 +9,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -31,6 +32,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.user' => \App\Http\Middleware\EnsureUserIsActive::class,
             'ensure.user.tenant' => \App\Http\Middleware\EnsureUserBelongsToTenant::class,
             'tenant.access' => \App\Http\Middleware\TenantAccess::class,
+            'tenant.key' => \App\Http\Middleware\IdentifyTenantFromApiKey::class,
+            'tenant.feature' => \App\Http\Middleware\RequireTenantFeature::class,
+            'tenant.last_seen' => \App\Http\Middleware\TouchTenantLastSeen::class,
+            'platform.owner' => \App\Http\Middleware\EnsurePlatformOwner::class,
         ]);
 
         // ✅ CRITICAL: ensure tenant/team middleware runs before spatie role middleware

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Database\Seeders\TenantTaxTypeSeeder;
 use App\Services\TenantBootstrapService;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
 
 class Tenant extends Model
 {
@@ -15,6 +17,16 @@ class Tenant extends Model
         'plan',
         'status',
         'logo_path',
+
+        // PDF/company info
+        'bank_details',
+        'company_address',
+        'vat_number',
+        'registration_number',
+
+        // platform meta
+        'owner_user_id',
+        'last_seen_at',
     ];
 
     protected static function booted()
@@ -28,6 +40,9 @@ class Tenant extends Model
             app(TenantBootstrapService::class)->seedRolesForTenant((int) $tenant->id);
         });
     }
+    protected $casts = [
+        'last_seen_at' => 'datetime',
+    ];
 
     public function users(): HasMany
     {
@@ -53,6 +68,18 @@ class Tenant extends Model
     {
         return 'subdomain';
     }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(\App\Models\Invoice::class);
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'owner_user_id');
+    }
+    
+
 }
 
 

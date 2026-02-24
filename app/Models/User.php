@@ -6,8 +6,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory, Notifiable, HasRoles;
 
@@ -24,6 +26,14 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    public function getAvatarUrlAttribute(): string
+    {
+        if ($this->avatar_path) {
+            return Storage::disk('public')->url($this->avatar_path);
+        }
+        return asset('asset/img/avatars/avatar.jpg');
+    }
+
     protected function casts(): array
     {
         return [
@@ -36,4 +46,5 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Tenant::class, 'tenant_id');
     }
+
 }

@@ -123,6 +123,14 @@
                                     <a href="https://crm.neptuneware.com/privacy-policy" target="_blank"
                                         rel="noopener">Privacy Policy</a>.
                                 </div>
+                                {{-- Turnstile --}}
+                                <div class="mb-3">
+                                    <div class="cf-turnstile" data-sitekey="{{ config('services.turnstile.site_key') }}">
+                                    </div>
+                                    @error('cf-turnstile-response')
+                                        <div class="text-danger small mt-1">{{ $message }}</div>
+                                    @enderror
+                                </div>
 
                                 <div class="d-grid gap-2 mt-3">
                                     <button type="submit" class="btn btn-lg btn-primary">
@@ -145,6 +153,7 @@
 @endsection
 
 @push('scripts')
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <script>
         document.addEventListener('click', function(e) {
             const btn = e.target.closest('[data-toggle-password]');

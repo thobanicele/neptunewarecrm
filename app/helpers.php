@@ -45,6 +45,9 @@ if (! function_exists('tenant_feature')) {
         if (! $tenant) return $default;
 
         // ✅ Trial/subscription-aware
+        if ($tenant && ($tenant->plan ?? null) === 'internal_neptuneware') {
+            if (in_array($feature, ['ecommerce_module','ecommerce_inbound_api'], true)) return true;
+        }
         return TenantPlan::feature($tenant, $feature, $default);
     }
 }
@@ -55,6 +58,26 @@ if (! function_exists('tenant_limit')) {
         if (! $tenant) return $default;
 
         return TenantPlan::limit($tenant, $path, $default);
+    }
+}
+
+if (! function_exists('tenant_is_internal_allowed')) {
+    function tenant_is_internal_allowed(?Tenant $tenant): bool
+    {
+        if (! $tenant) return false;
+
+        // if internal-only is OFF, allow all tenants
+        if (! config('ecommerce_internal.only', true)) {
+            return true;
+        }
+
+        $raw = (string) config('ecommerce_internal.allowed', '');
+        $allowed = array_values(array_filter(array_map('trim', explode(',', $raw))));
+
+        $id = (string) $tenant->id;
+        $sub = (string) ($tenant->subdomain ?? '');
+
+        return in_array($id, $allowed, true) || ($sub !== '' && in_array($sub, $allowed, true));
     }
 }
 

@@ -31,7 +31,11 @@ return [
         // Your Paystack plan codes (created on Paystack dashboard)
         'paystack' => [
             'premium_monthly_plan_code' => env('PAYSTACK_PLAN_PREMIUM_MONTHLY'), // PLN_xxx
-            'premium_yearly_plan_code'  => env('PAYSTACK_PLAN_PREMIUM_YEARLY'),  // PLN_xxx
+            'premium_yearly_plan_code'  => env('PAYSTACK_PLAN_PREMIUM_YEARLY'),
+
+            'business_monthly_plan_code' => env('PAYSTACK_PLAN_BUSINESS_MONTHLY'), // PLN_xxx
+            'business_yearly_plan_code'  => env('PAYSTACK_PLAN_BUSINESS_YEARLY'), 
+            // PLN_xxx
         ],
 
         'users' => [
@@ -89,8 +93,11 @@ return [
             'users' => ['max' => 3],
             'pipelines' => ['max' => 1],
             'storage_mb' => ['max' => 1024],
-
+            
             'invoices' => [
+                'max_per_month' => 10,
+            ],
+            'sales_orders' => [
                 'max_per_month' => 10,
             ],
 
@@ -107,12 +114,18 @@ return [
                 'sales_analytics' => false,
                 'priority_support' => false,
                 'dedicated_account_manager' => false,
-                'sales_orders' => false,
                 'purchase_orders' => false,
                 'vender_management' => false,
                 'expense_tracking' => false,
                 'custom_reporting' => false,
                 'workflow_automation' => false,
+            ],
+            'features_ui' => [
+                'Kanban board',
+                'Quotations',
+                'Limited Sales Orders & Invoices',
+                'Invoice PDF watermark',
+                'Invoice email sending',
             ],
         ],
 
@@ -127,12 +140,14 @@ return [
             'invoices' => [
                 'max_per_month' => null, // unlimited
             ],
+            'sales_orders' => [
+                'max_per_month' => null, // unlimited
+            ],    
 
             'features' => [
                 'kanban' => true,
                 'export' => true,
                 'custom_branding' => true,
-
                 'invoicing_manual' => true,
                 'invoicing_convert_from_quote' => true,
                 'invoice_pdf_watermark' => false,
@@ -149,6 +164,19 @@ return [
                 'custom_reporting' => false,
                 'workflow_automation' => false,
             ],
+            'features_ui' => [
+                'Kanban board',
+                'Quotations',
+                'Unlimited Invoices & Sales Orders',
+                'No PDF watermark',
+                'Invoice email sending',
+                'Statements',
+                'Payments',
+                'Credit Notes',
+                'Exports (Excel/CSV)',
+                'Custom Branding',
+                'Reports',
+            ],
         ],
 
         'business' => [
@@ -162,18 +190,19 @@ return [
             'invoices' => [
                 'max_per_month' => null, // unlimited
             ],
+            'sales_orders' => [
+                'max_per_month' => null, // unlimited
+            ],
 
             'features' => [
                 'kanban' => true,
                 'export' => true,
                 'custom_branding' => true,
-
                 'invoicing_manual' => true,
                 'invoicing_convert_from_quote' => true,
                 'invoice_pdf_watermark' => false,
                 'invoice_email_send' => true,
                 'statements' => true,
-                 'sales_orders' => true,
                 'sales_forecasting' => true,
                 'sales_analytics' => true,
                 'priority_support' => true,
@@ -184,7 +213,38 @@ return [
                 'custom_reporting' => true,
                 'workflow_automation' => true,
             ],
+            'features_ui' => [
+                'Everything in Premium',
+                'Sales forecasting',
+                'Sales analytics',
+                'Workflow automation',
+                'Custom reporting',
+                'Priority support',
+                'Dedicated account manager',
+                'Purchase orders',
+                'Vendor management',
+                'Expense tracking',
+            ],
         ],
-    ],
+
+        'internal_neptuneware' => [
+            'label' => 'Internal (NeptuneWare)',
+
+            'deals' => ['max' => 0],
+            'users' => ['max' => 0],
+            'pipelines' => ['max' => 0],
+            'storage_mb' => ['max' => 2048],
+
+            'invoices' => ['max_per_month' => null],
+            'sales_orders' => ['max_per_month' => null],
+
+            'features' => [
+                'ecommerce_module' => true,
+                'ecommerce_inbound_api' => true,
+                'export' => true,
+                'custom_branding' => true,
+            ],
+        ],
+    ], 
 ];
 

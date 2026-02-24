@@ -87,6 +87,15 @@ class DocumentNumberService
     {
         return $this->next($tenantId, 'credit_note', 'CN', 5, false);
     }
+
+    /**
+     * Sales Order numbers WITHOUT year:
+     * Example: SO-000001
+     */
+    public function nextSalesOrderNumber(int $tenantId): string
+    {
+        return $this->next($tenantId, 'sales_order', 'SO', 6, false);
+    }
 }
 
 

@@ -15,6 +15,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        
     ];
 
 
@@ -37,14 +38,17 @@ class Kernel extends HttpKernel
 
 
     protected $middlewareAliases = [
-    'auth' => \App\Http\Middleware\Authenticate::class,
-
-    'identify.tenant.path' => \App\Http\Middleware\IdentifyTenantFromPath::class,
-    'tenant' => \App\Http\Middleware\TenantMiddleware::class,
-    'no.tenant' => \App\Http\Middleware\EnsureUserHasNoTenant::class,
-
-    'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-    'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-    'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
-];
+        'auth' => \App\Http\Middleware\Authenticate::class,
+        'identify.tenant.path' => \App\Http\Middleware\IdentifyTenantFromPath::class,
+        'tenant.last_seen' => \App\Http\Middleware\TouchTenantLastSeen::class,
+        'platform.owner' => \App\Http\Middleware\EnsurePlatformOwner::class,
+        'tenant' => \App\Http\Middleware\TenantMiddleware::class,
+        'no.tenant' => \App\Http\Middleware\EnsureUserHasNoTenant::class,
+        'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+        'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        'tenant.key' => \App\Http\Middleware\IdentifyTenantFromApiKey::class,
+        'tenant.feature' => \App\Http\Middleware\RequireTenantFeature::class,
+        
+    ];
 }

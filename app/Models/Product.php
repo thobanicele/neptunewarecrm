@@ -8,6 +8,8 @@ class Product extends Model
 {
     protected $fillable = [
         'tenant_id',
+        'brand_id',
+        'category_id',
         'sku',
         'name',
         'description',
@@ -28,6 +30,15 @@ class Product extends Model
         return $this->belongsTo(\App\Models\TaxType::class, 'tax_type_id');
     }
 
+    public function brand()
+    {
+        return $this->belongsTo(\App\Models\Brand::class, 'brand_id');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(\App\Models\Category::class, 'category_id');
+    }
 }
 
 

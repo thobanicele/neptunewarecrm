@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\Models\TenantAddon;
 
 class TenantPlan
 {
@@ -65,15 +66,43 @@ class TenantPlan
      */
     public static function feature(string|Tenant|null $planOrTenant, string $feature, bool $default = false): bool
     {
-        $plan = $planOrTenant instanceof Tenant
-            ? self::effectivePlan($planOrTenant)
+        $tenant = $planOrTenant instanceof Tenant ? $planOrTenant : null;
+
+        $plan = $tenant
+            ? self::effectivePlan($tenant)
             : self::resolve($planOrTenant);
 
-        return (bool) data_get(
+        $enabledByPlan = (bool) data_get(
             config("plans.plans.$plan.features", []),
             $feature,
             $default
         );
+
+        if ($enabledByPlan) {
+            return true;
+        }
+
+        // ✅ Add-on fallback (tenant only)
+        if (!$tenant) {
+            return false;
+        }
+
+        // Map feature flags to addon keys
+        $featureToAddon = [
+            'ecommerce_module' => 'ecommerce',
+            'ecommerce_inbound_api' => 'ecommerce',
+        ];
+
+        $addonKey = $featureToAddon[$feature] ?? null;
+        if (!$addonKey) {
+            return false;
+        }
+
+        return TenantAddon::query()
+            ->where('tenant_id', $tenant->id)
+            ->where('key', $addonKey)
+            ->where('is_enabled', true)
+            ->exists();
     }
 
     /**

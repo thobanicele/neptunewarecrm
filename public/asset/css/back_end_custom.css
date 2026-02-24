@@ -1,0 +1,12 @@
+.nw-caret-left {
+    display: inline-block;
+    transition: transform .15s ease;
+    font-size: 18px;
+    line-height: 1;
+    opacity: .75;
+}
+
+/* When dropdown is open, sidebar-link won't have .collapsed */
+.sidebar-link:not(.collapsed) .nw-caret-left {
+    transform: rotate(90deg);
+}

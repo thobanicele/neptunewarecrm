@@ -60,6 +60,17 @@ class TenantLimits
                     return $this->blocked($request, 'custom_branding', $tenant, "Custom branding is a Premium feature.");
                 }
                 break;
+            case 'feature.ecommerce_module':
+                if (!TenantPlan::feature($plan, 'ecommerce_module', false)) {
+                    return $this->blocked($request, 'ecommerce_module', $tenant, "Ecommerce module is not enabled for your plan.");
+                }
+                break;
+
+            case 'feature.ecommerce_inbound_api':
+                if (!TenantPlan::feature($plan, 'ecommerce_inbound_api', false)) {
+                    return $this->blocked($request, 'ecommerce_inbound_api', $tenant, "Ecommerce inbound API is not enabled for your plan.");
+                }
+                break;
         }
 
         return $next($request);

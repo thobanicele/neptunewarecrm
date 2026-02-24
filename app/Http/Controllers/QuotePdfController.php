@@ -6,6 +6,7 @@ use App\Models\Quote;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use App\Models\Tenant;
+use App\Services\ActivityLogger;
 
 class QuotePdfController extends Controller
 {
@@ -22,6 +23,11 @@ class QuotePdfController extends Controller
             'deal',
             'tenant',
         ]);
+
+                app(ActivityLogger::class)->log($tenant->id, 'quote.pdf_viewed', $quote, [
+            'quote_number' => $quote->quote_number,
+        ]);
+
 
 
         return Pdf::loadView('tenant.quotes.pdf', compact('tenant','quote'))
@@ -41,6 +47,11 @@ class QuotePdfController extends Controller
             'deal',
             'tenant',
         ]);
+
+                app(ActivityLogger::class)->log($tenant->id, 'quote.pdf_downloaded', $quote, [
+            'quote_number' => $quote->quote_number,
+        ]);
+
 
         return Pdf::loadView('tenant.quotes.pdf', compact('tenant','quote'))
             ->download($quote->quote_number . '.pdf');

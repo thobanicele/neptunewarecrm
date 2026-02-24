@@ -43,14 +43,17 @@ class TenantOnboardingController extends Controller
                 'status'    => 'active',
             ]);
 
-            // ✅ Ensure roles exist (idempotent). Prevents empty configs / missing role rows.
+            // Ensure roles exist (idempotent)
             $bootstrap->seedRolesForTenant((int) $tenant->id);
 
-            // Attach user
+            // Attach user to tenant
             $user->forceFill([
-                'tenant_id' => $tenant->id,
-                'is_active' => true,
+                'tenant_id'  => $tenant->id,
+                'is_active'  => true,
             ])->save();
+
+            // ✅ Set tenant owner (platform-level)
+            $tenant->forceFill(['owner_user_id' => $user->id])->save();
 
             // Assign role under correct team scope
             app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
@@ -72,7 +75,6 @@ class TenantOnboardingController extends Controller
                     ]
                 );
 
-                // If tenant_feature() checks tenant.plan, this MUST be premium during trial
                 $tenant->forceFill(['plan' => 'premium'])->save();
             }
 
@@ -90,7 +92,7 @@ class TenantOnboardingController extends Controller
         return redirect()
             ->route('tenant.dashboard', ['tenant' => $tenant->subdomain])
             ->with('success', 'Workspace created successfully!');
-        }   
+    }
 
     
 

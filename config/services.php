@@ -41,4 +41,9 @@ return [
         'webhook' => env('PAYSTACK_WEBHOOK_SECRET'), // optional (we can use secret for signature verify)
     ],
 
+    'turnstile' => [
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+    ],
+
 ];

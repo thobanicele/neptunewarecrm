@@ -18,9 +18,12 @@ return [
         'deals'        => ['view', 'create', 'update', 'delete'],
         'contacts'     => ['view', 'create', 'update', 'delete'],
         'companies'    => ['view', 'create', 'update', 'delete'],
+        'brands'       => ['view', 'create', 'update', 'delete'],
+        'categories'   => ['view', 'create', 'update', 'delete'],
         'products'     => ['view', 'create', 'update', 'delete'],
 
         'quotes'       => ['view', 'create', 'update', 'delete', 'send', 'accept', 'decline', 'pdf'],
+        'sales_orders' => ['view', 'create', 'update', 'delete', 'issue', 'cancel', 'convert_to_invoice', 'export'],
         'invoices'     => ['view', 'create', 'update', 'delete', 'send', 'pdf'],
         'payments'     => ['view', 'create', 'update', 'delete'],
         'credit_notes' => ['view', 'create', 'update', 'delete'],

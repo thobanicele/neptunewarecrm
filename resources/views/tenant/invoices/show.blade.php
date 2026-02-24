@@ -5,19 +5,20 @@
         $pill = fn($status) => match (strtolower((string) $status)) {
             'draft' => 'secondary',
             'issued' => 'warning',
+            'paid' => 'success',
             'void' => 'dark',
             default => 'light',
         };
 
-        $ribbonText = strtoupper((string) ($invoice->paymentStatus ?? 'UNPAID'));
+        // Payment ribbon text (unpaid/partially_paid/paid from controller)
+        $ribbonText = strtoupper((string) ($paymentStatus ?? 'unpaid'));
 
-        // Use invoice header totals (these already include discount logic from your backend)
-        $subGross = round((float) ($invoice->subtotal ?? 0), 2); // "gross subtotal"
+        // Use invoice header totals (already includes discount logic from backend)
+        $subGross = round((float) ($invoice->subtotal ?? 0), 2);
         $discount = round((float) ($invoice->discount_amount ?? 0), 2);
         $vat = round((float) ($invoice->tax_amount ?? 0), 2);
         $grand = round((float) ($invoice->total ?? $subGross - $discount + $vat), 2);
 
-        // For table rows we compute incl = line_total + tax_amount (line_total is NET excl vat)
         $currencySymbol = $invoice->currency === 'ZAR' || empty($invoice->currency) ? 'R' : $invoice->currency;
         $money = fn($n) => $currencySymbol . ' ' . number_format((float) $n, 2);
 
@@ -33,6 +34,22 @@
                 return (string) $d;
             }
         };
+
+        $fmtDateTime = function ($d) {
+            if (!$d) {
+                return '—';
+            }
+            try {
+                return $d instanceof \Carbon\CarbonInterface
+                    ? $d->format('d/m/Y H:i')
+                    : \Carbon\Carbon::parse($d)->format('d/m/Y H:i');
+            } catch (\Throwable $e) {
+                return (string) $d;
+            }
+        };
+
+        // activity tab count
+        $activityCount = $invoice->activityLogs?->count() ?? 0;
     @endphp
 
     <style>
@@ -42,7 +59,6 @@
             border: 1px solid rgba(0, 0, 0, .08);
             border-radius: 12px;
             padding: 28px 22px 22px 70px;
-            /* space for ribbon */
             position: relative;
         }
 
@@ -55,7 +71,7 @@
             margin: 16px 0;
         }
 
-        /* --- Status ribbon --- */
+        /* --- Ribbon --- */
         .nw-ribbon {
             position: absolute;
             top: -6px;
@@ -83,20 +99,16 @@
             letter-spacing: .5px;
         }
 
-        .nw-ribbon.draft span {
+        .nw-ribbon.unpaid span {
             background: #6c757d;
         }
 
-        .nw-ribbon.issued span {
+        .nw-ribbon.partially_paid span {
             background: #f0ad4e;
         }
 
         .nw-ribbon.paid span {
             background: #198754;
-        }
-
-        .nw-ribbon.void span {
-            background: #212529;
         }
 
         /* --- Header --- */
@@ -235,12 +247,9 @@
             font-weight: 900;
         }
 
-        /* --- Footer blocks --- */
-        .nw-footer-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 18px;
-            margin-top: 22px;
+        /* Tabs */
+        .nw-tabs .nav-link {
+            font-weight: 600;
         }
 
         .nw-pre {
@@ -249,28 +258,30 @@
     </style>
 
     <div class="container-fluid py-4">
-        {{-- Top bar (same as quote) --}}
+
+        {{-- Top header + actions --}}
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
-                <h3 class="mb-0">{{ $invoice->invoice_number }}</h3>
+                <h3 class="mb-1">{{ $invoice->invoice_number }}</h3>
                 <div class="text-muted small">
                     Status:
                     <span class="badge rounded-pill text-bg-{{ $pill($invoice->status) }}">
                         {{ strtoupper((string) $invoice->status) }}
                     </span>
                     • Total: {{ $money($grand) }}
-                    • Sales Person: {{ optional($invoice->salesPerson ?? null)->name ?? '—' }}
-                    • Owner: {{ optional($invoice->owner ?? null)->name ?? '—' }}
+                    • Sales Person: {{ $invoice->salesPerson?->name ?? '—' }}
+                    • Owner: {{ $invoice->owner?->name ?? '—' }}
                 </div>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
                 <a href="{{ tenant_route('tenant.invoices.index') }}" class="btn btn-light">Back</a>
 
                 @if ($invoice->status === 'draft')
                     <a href="{{ tenant_route('tenant.invoices.edit', ['invoice' => $invoice->id]) }}"
                         class="btn btn-outline-secondary">Edit</a>
                 @endif
+
                 @can('pdf', $invoice)
                     <a href="{{ tenant_route('tenant.invoices.pdf.stream', ['invoice' => $invoice->id]) }}" target="_blank"
                         class="btn btn-outline-primary">PDF</a>
@@ -300,279 +311,391 @@
             </div>
         </div>
 
+        {{-- Flash --}}
         @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
         @endif
         @if (session('error'))
-            <div class="alert alert-danger">{{ session('error') }}</div>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
         @endif
 
-        <div class="nw-paper">
-
-            {{-- Ribbon --}}
-            <div class="nw-ribbon {{ strtolower((string) $invoice->paymentStatus) }}">
-                <span>{{ $ribbonText }}</span>
-            </div>
-
-            {{-- Header --}}
-            <div class="nw-header">
-                <div class="nw-brand">
-                    @if (!empty($tenant->logo_path))
-                        <img class="nw-logo" src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo">
-                    @else
-                        <div class="rounded bg-light border d-flex align-items-center justify-content-center"
-                            style="height:64px; width:64px;">
-                            <span class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
-                        </div>
+        {{-- Tabs (same pattern as Quotes) --}}
+        <ul class="nav nav-tabs nw-tabs mb-3" id="invoiceTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview"
+                    type="button" role="tab" aria-controls="preview" aria-selected="true">
+                    Preview
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button"
+                    role="tab" aria-controls="activity" aria-selected="false">
+                    Activity Log
+                    @if ($activityCount > 0)
+                        <span class="badge bg-light text-dark border ms-1">{{ $activityCount }}</span>
                     @endif
+                </button>
+            </li>
+        </ul>
 
-                    <div>
-                        <div class="fw-bold" style="font-size:18px;">{{ $tenant->name }}</div>
-                        <div class="nw-muted small">Workspace: {{ $tenant->subdomain }}</div>
+        <div class="tab-content" id="invoiceTabsContent">
 
-                        @if (!empty($tenant->address))
-                            <div class="nw-muted small nw-pre" style="margin-top:8px;">{{ $tenant->address }}</div>
-                        @endif
-
-                        @if (!empty($tenant->vat_number))
-                            <div class="nw-muted small" style="margin-top:6px;">VAT Number: {{ $tenant->vat_number }}</div>
-                        @endif
-                    </div>
-                </div>
-
-                <div class="nw-title">
-                    <h1>Invoice</h1>
-                    <div class="nw-quote-no"># {{ $invoice->invoice_number }}</div>
-
-                    <div class="nw-meta">
-                        <div>Invoice Date :</div>
-                        <div><strong>{{ $fmtDate($invoice->issued_at) }}</strong></div>
-
-                        <div>Due Date :</div>
-                        <div><strong>{{ $fmtDate($invoice->due_at) }}</strong></div>
-
-                        <div>Reference :</div>
-                        <div><strong>{{ $invoice->reference ?? '—' }}</strong></div>
-
-                        <div>Status :</div>
-                        <div><strong>{{ strtoupper((string) $invoice->status) }}</strong></div>
-
-                        <div>Quote # :</div>
-                        <div><strong>{{ $invoice->quote_number ?? '—' }}</strong></div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Parties --}}
-            <div class="nw-parties">
-                <div class="nw-box">
-                    <h6>Bill To</h6>
-                    <div class="fw-bold" style="color:#2563eb;">
-                        {{ $invoice->company?->name ?? '—' }}
+            {{-- Preview tab --}}
+            <div class="tab-pane fade show active" id="preview" role="tabpanel" aria-labelledby="preview-tab">
+                <div class="nw-paper">
+                    {{-- Ribbon --}}
+                    <div class="nw-ribbon {{ strtolower((string) ($paymentStatus ?? 'unpaid')) }}">
+                        <span>{{ $ribbonText }}</span>
                     </div>
 
-                    @if ($invoice->company?->vat_number)
-                        <div class="nw-muted small" style="margin-top:6px;">
-                            VAT Number: {{ $invoice->company->vat_number }}
+                    {{-- Header --}}
+                    <div class="nw-header">
+                        <div class="nw-brand">
+                            @if (!empty($tenant->logo_path))
+                                <img class="nw-logo" src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo">
+                            @else
+                                <div class="rounded bg-light border d-flex align-items-center justify-content-center"
+                                    style="height:64px; width:64px;">
+                                    <span
+                                        class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
+                                </div>
+                            @endif
+
+                            <div>
+                                <div class="fw-bold" style="font-size:18px;">{{ $tenant->name }}</div>
+                                <div class="nw-muted small">Workspace: {{ $tenant->subdomain }}</div>
+
+                                @if (!empty($tenant->address))
+                                    <div class="nw-muted small nw-pre" style="margin-top:8px;">{{ $tenant->address }}</div>
+                                @endif
+
+                                @if (!empty($tenant->vat_number))
+                                    <div class="nw-muted small" style="margin-top:6px;">VAT Number:
+                                        {{ $tenant->vat_number }}</div>
+                                @endif
+                            </div>
                         </div>
-                    @endif
 
-                    @if ($invoice->contact)
-                        <div class="nw-muted small" style="margin-top:6px;">
-                            {{ $invoice->contact->name }}
-                            @if ($invoice->contact->email)
-                                • {{ $invoice->contact->email }}
+                        <div class="nw-title">
+                            <h1>Invoice</h1>
+                            <div class="nw-quote-no"># {{ $invoice->invoice_number }}</div>
+
+                            <div class="nw-meta">
+                                <div>Invoice Date :</div>
+                                <div><strong>{{ $fmtDate($invoice->issued_at) }}</strong></div>
+
+                                <div>Due Date :</div>
+                                <div><strong>{{ $fmtDate($invoice->due_at) }}</strong></div>
+
+                                <div>Reference :</div>
+                                <div><strong>{{ $invoice->reference ?? '—' }}</strong></div>
+
+                                <div>Status :</div>
+                                <div><strong>{{ strtoupper((string) $invoice->status) }}</strong></div>
+
+                                <div>Quote # :</div>
+                                <div><strong>{{ $invoice->quote_number ?? '—' }}</strong></div>
+
+                                <div>Sales Order # :</div>
+                                <div><strong>{{ $invoice->sales_order_number ?? '—' }}</strong></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Parties --}}
+                    <div class="nw-parties">
+                        <div class="nw-box">
+                            <h6>Bill To</h6>
+                            <div class="fw-bold" style="color:#2563eb;">
+                                {{ $invoice->company?->name ?? '—' }}
+                            </div>
+
+                            @if ($invoice->company?->vat_number)
+                                <div class="nw-muted small" style="margin-top:6px;">
+                                    VAT Number: {{ $invoice->company->vat_number }}
+                                </div>
+                            @endif
+
+                            @if ($invoice->contact)
+                                <div class="nw-muted small" style="margin-top:6px;">
+                                    {{ $invoice->contact->name }}
+                                    @if ($invoice->contact->email)
+                                        • {{ $invoice->contact->email }}
+                                    @endif
+                                </div>
+                            @endif
+
+                            @if (!empty($billTo))
+                                <div class="nw-pre small" style="margin-top:10px;">{{ $billTo }}</div>
+                            @else
+                                <div class="nw-muted small" style="margin-top:10px;">—</div>
                             @endif
                         </div>
-                    @endif
 
-                    @if (!empty($billTo))
-                        <div class="nw-pre small" style="margin-top:10px;">{{ $billTo }}</div>
-                    @else
-                        <div class="nw-muted small" style="margin-top:10px;">—</div>
-                    @endif
+                        <div class="nw-box">
+                            <h6>Ship To</h6>
+                            <div class="fw-bold">
+                                {{ $invoice->company?->name ?? '—' }}
+                            </div>
 
-                    @if (!empty($invoice->company?->payment_terms))
-                        <div class="nw-muted small" style="margin-top:10px;">
-                            Payment Terms: <strong>{{ $invoice->company->payment_terms }}</strong>
+                            @if (!empty($shipTo))
+                                <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>
+                            @else
+                                <div class="nw-muted small" style="margin-top:10px;">—</div>
+                            @endif
                         </div>
-                    @endif
-                </div>
-
-                <div class="nw-box">
-                    <h6>Ship To</h6>
-                    <div class="fw-bold">
-                        {{ $invoice->company?->name ?? '—' }}
                     </div>
 
-                    @if (!empty($shipTo))
-                        <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>
-                    @else
-                        <div class="nw-muted small" style="margin-top:10px;">—</div>
-                    @endif
+                    {{-- Items --}}
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">#</th>
+                                <th>Item &amp; Description</th>
+                                <th class="nw-right" style="width:90px;">Qty</th>
+                                <th class="nw-right" style="width:120px;">Rate</th>
+                                <th class="nw-right" style="width:120px;">Disc %</th>
+                                <th class="nw-right" style="width:140px;">VAT Amt</th>
+                                <th class="nw-right" style="width:140px;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($invoice->items as $idx => $it)
+                                @php
+                                    $line = (float) ($it->line_total ?? 0); // net excl VAT
+                                    $lineVat = (float) ($it->tax_amount ?? 0);
+                                    $incl = $line + $lineVat;
+                                @endphp
+                                <tr>
+                                    <td class="nw-right">{{ $idx + 1 }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $it->name }}</div>
+                                        @if (!empty($it->sku))
+                                            <span class="nw-item-sku">SKU : {{ $it->sku }}</span>
+                                        @endif
+                                        @if (!empty($it->description))
+                                            <div class="nw-muted" style="margin-top:6px;">{{ $it->description }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="nw-right">
+                                        {{ number_format((float) $it->qty, 2) }}
+                                        @if (!empty($it->unit))
+                                            <div class="nw-muted small">{{ $it->unit }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="nw-right">{{ $money((float) $it->unit_price) }}</td>
+                                    <td class="nw-right">{{ number_format((float) ($it->discount_pct ?? 0), 2) }}%</td>
+                                    <td class="nw-right">{{ $money($lineVat) }}</td>
+                                    <td class="nw-right"><strong>{{ $money($incl) }}</strong></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    {{-- Totals --}}
+                    @php
+                        $paid = round((float) ($paymentsApplied ?? 0), 2);
+                        $credit = round((float) ($creditsApplied ?? 0), 2);
+                        $appliedTotal = isset($paymentsAndCredits)
+                            ? round((float) $paymentsAndCredits, 2)
+                            : round($paid + $credit, 2);
+                        $bal = isset($balanceDue)
+                            ? round((float) $balanceDue, 2)
+                            : round((float) $grand - $appliedTotal, 2);
+                        if ($bal < 0) {
+                            $bal = 0;
+                        }
+                    @endphp
+
+                    <div class="nw-totals-wrap">
+                        <table class="nw-totals">
+                            <tr>
+                                <td class="label nw-right">Sub Total</td>
+                                <td class="nw-right strong">{{ $money($subGross) }}</td>
+                            </tr>
+
+                            @if ($discount > 0)
+                                <tr>
+                                    <td class="label nw-right">Discount</td>
+                                    <td class="nw-right strong text-danger">- {{ $money($discount) }}</td>
+                                </tr>
+                            @endif
+
+                            <tr>
+                                <td class="label nw-right">
+                                    {{ $invoice->items->firstWhere('tax_name')?->tax_name ?? 'VAT' }}
+                                    @php $rate = $invoice->items->firstWhere('tax_name')?->tax_rate; @endphp
+                                    @if ($rate !== null)
+                                        ({{ number_format((float) $rate, 2) }}%)
+                                    @endif
+                                </td>
+                                <td class="nw-right strong">{{ $money($vat) }}</td>
+                            </tr>
+
+                            <tr class="total-row">
+                                <td class="nw-right">Total</td>
+                                <td class="nw-right">{{ $money($grand) }}</td>
+                            </tr>
+
+                            @if ($appliedTotal > 0)
+                                <tr>
+                                    <td class="label nw-right">Payments / Credits</td>
+                                    <td class="nw-right strong text-danger">- {{ $money($appliedTotal) }}</td>
+                                </tr>
+                            @endif
+
+                            <tr class="total-row">
+                                <td class="nw-right">Balance Due</td>
+                                <td class="nw-right {{ $bal > 0 ? '' : 'text-success' }}">{{ $money($bal) }}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    {{-- Notes / Terms + Banking --}}
+                    <div class="nw-footer-grid">
+                        <div class="nw-box">
+                            <h6>Terms &amp; Conditions</h6>
+
+                            @if (!empty($tenant->bank_details))
+                                <div class="fw-semibold">Banking details:</div>
+                                <div class="nw-muted small nw-pre" style="margin-top:6px;">{{ $tenant->bank_details }}
+                                </div>
+                                <div class="nw-hr"></div>
+                            @endif
+
+                            @if (!empty($invoice->terms))
+                                <div class="nw-pre small">{{ $invoice->terms }}</div>
+                            @else
+                                <div class="nw-muted small">—</div>
+                            @endif
+                        </div>
+
+                        <div class="nw-box">
+                            <h6>Notes</h6>
+
+                            @if (!empty($invoice->notes))
+                                <div class="nw-pre small">{{ $invoice->notes }}</div>
+                            @else
+                                <div class="nw-muted small">—</div>
+                            @endif
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
-            {{-- Items --}}
-            <table class="nw-table">
-                <thead>
-                    <tr>
-                        <th style="width:50px;">#</th>
-                        <th>Item &amp; Description</th>
-                        <th class="nw-right" style="width:90px;">Qty</th>
-                        <th class="nw-right" style="width:120px;">Rate</th>
-                        <th class="nw-right" style="width:120px;">Disc %</th>
-                        <th class="nw-right" style="width:140px;">VAT Amt</th>
-                        <th class="nw-right" style="width:140px;">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($invoice->items as $idx => $it)
+            {{-- Activity Log tab (TABULAR like Quotes) --}}
+            <div class="tab-pane fade" id="activity" role="tabpanel" aria-labelledby="activity-tab">
+                <div class="card">
+                    <div class="card-body">
                         @php
-                            $line = (float) ($it->line_total ?? 0); // excl VAT (net)
-                            $lineVat = (float) ($it->tax_amount ?? 0); // VAT
-                            $incl = $line + $lineVat;
+                            $logs = ($invoice->activityLogs ?? collect())->take(50);
+
+                            $label = function ($action) {
+                                return match ($action) {
+                                    'invoice.created' => 'Created',
+                                    'invoice.updated' => 'Updated',
+                                    'invoice.status_changed' => 'Status changed',
+                                    'invoice.mark_paid' => 'Marked paid',
+                                    'invoice.created_from_quote' => 'Created from Quote',
+                                    'invoice.created_from_sales_order' => 'Created from Sales Order',
+                                    default => $action,
+                                };
+                            };
+
+                            $badge = function ($action) {
+                                return match ($action) {
+                                    'invoice.created' => 'bg-light text-dark border',
+                                    'invoice.updated' => 'bg-info text-dark',
+                                    'invoice.status_changed' => 'bg-warning text-dark',
+                                    'invoice.mark_paid' => 'bg-success',
+                                    'invoice.created_from_quote' => 'bg-primary',
+                                    'invoice.created_from_sales_order' => 'bg-primary',
+                                    default => 'bg-light text-dark border',
+                                };
+                            };
                         @endphp
-                        <tr>
-                            <td class="nw-right">{{ $idx + 1 }}</td>
-                            <td>
-                                <div class="fw-semibold">{{ $it->name }}</div>
 
-                                @if (!empty($it->sku))
-                                    <span class="nw-item-sku">SKU : {{ $it->sku }}</span>
-                                @endif
+                        @if ($logs->isEmpty())
+                            <div class="text-muted small">No activity yet.</div>
+                        @else
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 170px;">When</th>
+                                            <th>Activity</th>
+                                            <th style="width: 180px;">By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($logs as $log)
+                                            @php
+                                                $meta = $log->meta ?? [];
+                                                $from = data_get($meta, 'from');
+                                                $to = data_get($meta, 'to');
+                                            @endphp
+                                            <tr>
+                                                <td class="text-muted small">
+                                                    {{ $fmtDateTime($log->created_at) }}
+                                                </td>
+                                                <td>
+                                                    <span class="badge {{ $badge($log->action) }}">
+                                                        {{ $label($log->action) }}
+                                                    </span>
 
-                                @if (!empty($it->description))
-                                    <div class="nw-muted" style="margin-top:6px;">{{ $it->description }}</div>
-                                @endif
-                            </td>
+                                                    @if ($log->action === 'invoice.status_changed')
+                                                        <span class="ms-2">
+                                                            <span class="badge bg-light text-dark border">
+                                                                {{ strtoupper((string) $from) }}
+                                                            </span>
+                                                            →
+                                                            <span class="badge bg-primary">
+                                                                {{ strtoupper((string) $to) }}
+                                                            </span>
+                                                        </span>
+                                                    @endif
 
-                            <td class="nw-right">
-                                {{ number_format((float) $it->qty, 2) }}
-                                @if (!empty($it->unit))
-                                    <div class="nw-muted small">{{ $it->unit }}</div>
-                                @endif
-                            </td>
+                                                    @if ($log->action === 'invoice.created_from_quote')
+                                                        <div class="text-muted small mt-1">
+                                                            Quote: {{ data_get($meta, 'quote_number', '—') }}
+                                                        </div>
+                                                    @endif
 
-                            <td class="nw-right">{{ $money((float) $it->unit_price) }}</td>
-                            <td class="nw-right">{{ number_format((float) ($it->discount_pct ?? 0), 2) }}%</td>
-                            <td class="nw-right">{{ $money($lineVat) }}</td>
-                            <td class="nw-right"><strong>{{ $money($incl) }}</strong></td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+                                                    @if ($log->action === 'invoice.created_from_sales_order')
+                                                        <div class="text-muted small mt-1">
+                                                            SO: {{ data_get($meta, 'sales_order_number', '—') }}
+                                                        </div>
+                                                    @endif
 
-            {{-- Totals --}}
-            @php
-                // Prefer combined value passed from controller, fallback to paid+credit
-                $paid = round((float) ($paymentsApplied ?? 0), 2);
-                $credit = round((float) ($creditsApplied ?? 0), 2);
+                                                    @if ($log->action === 'invoice.mark_paid')
+                                                        <div class="text-muted small mt-1">
+                                                            Amount: {{ $money((float) data_get($meta, 'amount', 0)) }}
+                                                            • Method: {{ data_get($meta, 'method', '—') }}
+                                                        </div>
+                                                    @endif
 
-                $appliedTotal = isset($paymentsAndCredits)
-                    ? round((float) $paymentsAndCredits, 2)
-                    : round($paid + $credit, 2);
-
-                // Use controller balanceDue if present (already tolerance-safe)
-                $bal = isset($balanceDue) ? round((float) $balanceDue, 2) : round((float) $grand - $appliedTotal, 2);
-
-                if ($bal < 0) {
-                    $bal = 0;
-                }
-
-                // Display label: option A (unpaid / partially_paid / paid)
-                // If you passed $paymentStatus from controller, use it; else derive it.
-                $displayStatus =
-                    $paymentStatus ?? ($appliedTotal <= 0 ? 'unpaid' : ($isPaid ?? false ? 'paid' : 'partially_paid'));
-            @endphp
-
-            <div class="nw-totals-wrap">
-                <table class="nw-totals">
-                    <tr>
-                        <td class="label nw-right">Sub Total</td>
-                        <td class="nw-right strong">{{ $money($subGross) }}</td>
-                    </tr>
-
-                    <tr>
-                        <td class="label nw-right">
-                            {{ $invoice->items->firstWhere('tax_name')?->tax_name ?? 'VAT' }}
-                            @php $rate = $invoice->items->firstWhere('tax_name')?->tax_rate; @endphp
-                            @if ($rate !== null)
-                                ({{ number_format((float) $rate, 2) }}%)
-                            @endif
-                        </td>
-                        <td class="nw-right strong">{{ $money($vat) }}</td>
-                    </tr>
-
-                    <tr class="total-row">
-                        <td class="nw-right">Total</td>
-                        <td class="nw-right">{{ $money($grand) }}</td>
-                    </tr>
-
-                    {{-- ✅ Combined Payments/Credits (negative red) --}}
-                    @if ($appliedTotal > 0)
-                        <tr>
-                            <td class="label nw-right">Payments / Credits</td>
-                            <td class="nw-right strong text-danger">
-                                - {{ $money($appliedTotal) }}
-                            </td>
-                        </tr>
-                    @endif
-
-                    {{-- ✅ Balance Due --}}
-                    <tr class="total-row">
-                        <td class="nw-right">
-                            Balance Due
-                        </td>
-                        <td class="nw-right {{ $bal > 0 ? '' : 'text-success' }}">
-                            {{ $money($bal) }}
-                        </td>
-                    </tr>
-                </table>
-            </div>
-
-            {{-- Notes / Terms + Banking --}}
-            <div class="nw-footer-grid">
-                <div class="nw-box">
-                    <h6>Terms &amp; Conditions</h6>
-
-                    @if (!empty($tenant->bank_details))
-                        <div class="fw-semibold">Banking details:</div>
-                        <div class="nw-muted small nw-pre" style="margin-top:6px;">{{ $tenant->bank_details }}</div>
-                        <div class="nw-hr"></div>
-                    @endif
-
-                    @if (!empty($invoice->terms))
-                        <div class="nw-pre small">{{ $invoice->terms }}</div>
-                    @else
-                        <div class="nw-muted small">—</div>
-                    @endif
-                </div>
-
-                <div class="nw-box">
-                    <h6>Notes</h6>
-
-                    @if (!empty($invoice->notes))
-                        <div class="nw-pre small">{{ $invoice->notes }}</div>
-                    @else
-                        <div class="nw-muted small">—</div>
-                    @endif
-
-                    <div class="nw-hr"></div>
-
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="nw-muted small">Prepared by</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="nw-muted small">Received / Accepted by (Client)</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="nw-muted small">Date</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
+                                                    @if (!empty(data_get($meta, 'note')))
+                                                        <div class="text-muted small mt-1">
+                                                            {{ data_get($meta, 'note') }}
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td class="text-muted small">
+                                                    {{ $log->user?->name ?? 'System' }}
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>

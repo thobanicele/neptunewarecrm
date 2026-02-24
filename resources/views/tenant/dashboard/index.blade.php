@@ -6,7 +6,7 @@
         {{-- Header --}}
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div>
-                <h3 class="mb-0">Dashboard</h3>
+                <h3 class="mb-0">Dashboard </h3>
                 <div class="text-muted small">Tenant: {{ $tenant->name }} ({{ $tenant->subdomain }})</div>
             </div>
 
@@ -20,19 +20,27 @@
 
         {{-- ROW 1: KPI cards --}}
         <div class="row g-3 mb-3">
+            {{-- Overdue Invoices --}}
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div class="text-muted small">Open Deals</div>
-                            <span class="badge bg-light text-dark">Pipeline</span>
+                            <div class="text-muted small">Overdue Invoices</div>
+                            <span class="badge bg-danger">Overdue</span>
                         </div>
-                        <div class="display-6 fw-semibold mb-1">{{ $openDeals ?? 0 }}</div>
-                        <div class="text-muted small">Active deals not won/lost</div>
+                        <div class="display-6 fw-semibold mb-1">
+                            R {{ number_format((float) ($overdueInvoicesTotal ?? 0), 2) }}
+                        </div>
+                        <div class="text-muted small">
+                            {{ (int) ($overdueInvoicesCount ?? 0) }}
+                            invoice{{ (int) ($overdueInvoicesCount ?? 0) === 1 ? '' : 's' }}
+                            past due
+                        </div>
                     </div>
                 </div>
             </div>
 
+            {{-- Pipeline Value --}}
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="card h-100">
                     <div class="card-body">
@@ -40,26 +48,15 @@
                             <div class="text-muted small">Pipeline Value</div>
                             <span class="badge bg-light text-dark">Value</span>
                         </div>
-                        <div class="display-6 fw-semibold mb-1">R {{ number_format((float) ($pipelineValue ?? 0), 2) }}</div>
+                        <div class="display-6 fw-semibold mb-1">
+                            R {{ number_format((float) ($pipelineValue ?? 0), 2) }}
+                        </div>
                         <div class="text-muted small">Sum of open deals value</div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-12 col-md-6 col-xl-3">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="text-muted small">Invoices Outstanding</div>
-                            <span class="badge bg-warning text-dark">Chase</span>
-                        </div>
-                        <div class="display-6 fw-semibold mb-1">R {{ number_format((float) ($invoicesOutstanding ?? 0), 2) }}
-                        </div>
-                        <div class="text-muted small">Issued + unpaid/partial</div>
-                    </div>
-                </div>
-            </div>
-
+            {{-- Cash Collected (MTD) --}}
             <div class="col-12 col-md-6 col-xl-3">
                 <div class="card h-100">
                     <div class="card-body">
@@ -67,15 +64,100 @@
                             <div class="text-muted small">Cash Collected (MTD)</div>
                             <span class="badge bg-success">MTD</span>
                         </div>
-                        <div class="display-6 fw-semibold mb-1">R {{ number_format((float) ($cashCollectedMtd ?? 0), 2) }}
+                        <div class="display-6 fw-semibold mb-1">
+                            R {{ number_format((float) ($cashCollectedMtd ?? 0), 2) }}
                         </div>
                         <div class="text-muted small">From allocations this month</div>
                     </div>
                 </div>
             </div>
+
+            {{-- SO Pending Fulfillment --}}
+            <div class="col-12 col-md-6 col-xl-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="text-muted small">SO Pending Fulfillment</div>
+                            <span class="badge bg-light text-dark">Ops</span>
+                        </div>
+                        <div class="display-6 fw-semibold mb-1">{{ (int) ($soPendingCount ?? 0) }}</div>
+                        <div class="text-muted small">Issued / active sales orders not fulfilled</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        {{-- ROW 2: Charts --}}
+        {{-- ROW 2: Pipeline by stage + Cash trend --}}
+        <div class="row g-3 mb-3">
+            {{-- Pipeline by stage --}}
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <div class="fw-semibold">Pipeline by Stage</div>
+                                <div class="text-muted small">Open deals • Count + Value</div>
+                            </div>
+                            <span class="badge bg-light text-dark">Stages</span>
+                        </div>
+
+                        @php
+                            $stageRows = collect($pipelineByStage ?? []);
+                        @endphp
+
+                        @if ($stageRows->isEmpty())
+                            <div class="text-muted small">No pipeline data yet.</div>
+                        @else
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Stage</th>
+                                            <th class="text-end" style="width:120px;">Deals</th>
+                                            <th class="text-end" style="width:220px;">Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($stageRows as $r)
+                                            <tr>
+                                                <td class="fw-semibold">{{ data_get($r, 'stage', '—') }}</td>
+                                                <td class="text-end">{{ (int) data_get($r, 'count', 0) }}</td>
+                                                <td class="text-end">R
+                                                    {{ number_format((float) data_get($r, 'value', 0), 2) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="text-muted small mt-2">
+                                Tip: this shows where deals are stuck so sales can focus.
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            {{-- Cash trend --}}
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <div class="fw-semibold">Cash Trend</div>
+                                <div class="text-muted small">Last 30 days • Collected (allocations)</div>
+                            </div>
+                            <span class="badge bg-light text-dark">Trend</span>
+                        </div>
+
+                        <div style="height: 320px;">
+                            <canvas id="cashTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- ROW 3: (keep your existing stacked charts row) --}}
         <div class="row g-3 mb-3">
             <div class="col-12 col-xl-6">
                 <div class="card h-100">
@@ -114,14 +196,15 @@
             </div>
         </div>
 
-        {{-- ROW 3: Attention tables --}}
+        {{-- ROW 4: Attention / Work queues --}}
         <div class="row g-3">
+            {{-- Follow-ups --}}
             <div class="col-12 col-xl-6">
                 <div class="card h-100">
                     <div class="card-body pb-0 d-flex justify-content-between align-items-center">
                         <div class="fw-semibold">Attention: Follow-ups</div>
-                        <a class="small text-decoration-none" href="{{ tenant_route('tenant.activities.followups') }}">View
-                            all</a>
+                        <a class="small text-decoration-none"
+                            href="{{ tenant_route('tenant.activities.followups') }}">View all</a>
                     </div>
 
                     <div class="table-responsive">
@@ -154,9 +237,7 @@
                                                 <span class="badge rounded-pill text-bg-danger ms-1">OVERDUE</span>
                                             @endif
                                         </td>
-                                        <td class="text-muted">
-                                            {{ class_basename($a->subject_type ?? '') ?: '—' }}
-                                        </td>
+                                        <td class="text-muted">{{ class_basename($a->subject_type ?? '') ?: '—' }}</td>
                                         <td>
                                             @if ($a->due_at)
                                                 <div class="{{ $isOverdue ? 'text-danger fw-semibold' : '' }}">
@@ -186,10 +267,10 @@
                             </tbody>
                         </table>
                     </div>
-
                 </div>
             </div>
 
+            {{-- Invoices to chase --}}
             <div class="col-12 col-xl-6">
                 <div class="card h-100">
                     <div class="card-body pb-0 d-flex justify-content-between align-items-center">
@@ -223,8 +304,8 @@
                                             </a>
                                         </td>
                                         <td class="text-end">
-                                            {{-- If you don't have outstanding per invoice computed, show total for now --}}
-                                            R {{ number_format((float) ($inv->total ?? 0), 2) }}
+                                            R
+                                            {{ number_format((float) ($inv->outstanding_amount ?? ($inv->total ?? 0)), 2) }}
                                         </td>
                                         <td>
                                             <span
@@ -246,6 +327,128 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            {{-- Quotes expiring --}}
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body pb-0 d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">Attention: Quotes expiring soon</div>
+                        <a class="small text-decoration-none" href="{{ tenant_route('tenant.quotes.index') }}">View
+                            all</a>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Quote</th>
+                                    <th>Customer</th>
+                                    <th class="text-end">Value</th>
+                                    <th>Expiry</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse(($quotesExpiring ?? collect()) as $qte)
+                                    @php
+                                        $exp = $qte->expires_at ?? ($qte->valid_until ?? null);
+                                        $isSoon = $exp
+                                            ? \Illuminate\Support\Carbon::parse($exp)->diffInDays(now(), false) <= 7
+                                            : false;
+                                    @endphp
+                                    <tr>
+                                        <td class="fw-semibold">
+                                            <a
+                                                href="{{ tenant_route('tenant.quotes.show', $qte) }}">{{ $qte->quote_number ?? 'Quote #' . $qte->id }}</a>
+                                        </td>
+                                        <td class="text-muted">{{ $qte->company?->name ?? '—' }}</td>
+                                        <td class="text-end">R
+                                            {{ number_format((float) ($qte->subtotal ?? ($qte->total ?? 0)), 2) }}</td>
+                                        <td>
+                                            @if ($exp)
+                                                <div class="{{ $isSoon ? 'text-danger fw-semibold' : '' }}">
+                                                    {{ \Illuminate\Support\Carbon::parse($exp)->format('Y-m-d') }}
+                                                </div>
+                                                <div class="text-muted small">
+                                                    {{ \Illuminate\Support\Carbon::parse($exp)->diffForHumans() }}</div>
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary"
+                                                href="{{ tenant_route('tenant.quotes.show', $qte) }}">View</a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="text-muted px-3 py-4">No quotes expiring soon.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
+            </div>
+
+            {{-- SO pending table --}}
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body pb-0 d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">Attention: Sales Orders pending</div>
+                        <a class="small text-decoration-none" href="{{ tenant_route('tenant.sales-orders.index') }}">View
+                            all</a>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>SO</th>
+                                    <th>Customer</th>
+                                    <th class="text-end">Total</th>
+                                    <th>Age</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse(($soPending ?? collect()) as $so)
+                                    @php
+                                        $issued = $so->issued_at
+                                            ? \Illuminate\Support\Carbon::parse($so->issued_at)
+                                            : null;
+                                    @endphp
+                                    <tr>
+                                        <td class="fw-semibold">
+                                            <a
+                                                href="{{ tenant_route('tenant.sales-orders.show', $so) }}">{{ $so->sales_order_number ?? 'SO #' . $so->id }}</a>
+                                        </td>
+                                        <td class="text-muted">{{ $so->company?->name ?? '—' }}</td>
+                                        <td class="text-end">R {{ number_format((float) ($so->total ?? 0), 2) }}</td>
+                                        <td>
+                                            @if ($issued)
+                                                <div>{{ $issued->format('Y-m-d') }}</div>
+                                                <div class="text-muted small">{{ $issued->diffForHumans() }}</div>
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td class="text-end">
+                                            <a class="btn btn-sm btn-outline-primary"
+                                                href="{{ tenant_route('tenant.sales-orders.show', $so) }}">View</a>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="text-muted px-3 py-4">No pending sales orders.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
 
                 </div>
             </div>
@@ -259,12 +462,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <script>
-        // -----------------------------
-        // Data from controller
-        // -----------------------------
+        // Existing stacked chart data
         const months = @json(collect($months ?? [])->values());
         const quotesSeries = @json($quotesSeries ?? []);
         const invoicesSeries = @json($invoicesSeries ?? []);
+
+        // Cash trend (last 30 days)
+        const cashTrendLabels = @json(collect($cashTrendLabels ?? [])->values());
+        const cashTrendData = @json(collect($cashTrendData ?? [])->values());
 
         function formatCurrencyZAR(value) {
             const n = Number(value || 0);
@@ -275,9 +480,6 @@
         }
 
         function makeStackedDatasets(series) {
-            // Chart.js will auto color if no color provided,
-            // but we give subtle transparency for stacking.
-            // (No hard-coded theme colors; Chart.js will choose distinct defaults)
             return (series || []).map(s => ({
                 label: s.label,
                 data: s.data,
@@ -287,7 +489,7 @@
             }));
         }
 
-        function buildStackedChart(elId, datasets, valueLabel) {
+        function buildStackedChart(elId, datasets) {
             const el = document.getElementById(elId);
             if (!el) return;
 
@@ -295,7 +497,7 @@
                 type: 'bar',
                 data: {
                     labels: months,
-                    datasets: datasets
+                    datasets
                 },
                 options: {
                     maintainAspectRatio: false,
@@ -310,15 +512,12 @@
                             labels: {
                                 boxWidth: 10,
                                 boxHeight: 10,
-                                usePointStyle: true,
+                                usePointStyle: true
                             }
                         },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => {
-                                    const v = ctx.raw ?? 0;
-                                    return `${ctx.dataset.label}: ${formatCurrencyZAR(v)}`;
-                                },
+                                label: (ctx) => `${ctx.dataset.label}: ${formatCurrencyZAR(ctx.raw ?? 0)}`,
                                 footer: (items) => {
                                     const sum = items.reduce((acc, it) => acc + (Number(it.raw || 0)), 0);
                                     return `Total: ${formatCurrencyZAR(sum)}`;
@@ -344,13 +543,54 @@
             });
         }
 
-        // -----------------------------
-        // Render charts
-        // -----------------------------
-        const quotesDatasets = makeStackedDatasets(quotesSeries);
-        const invoicesDatasets = makeStackedDatasets(invoicesSeries);
+        // Cash trend chart (simple line)
+        (function buildCashTrend() {
+            const el = document.getElementById('cashTrendChart');
+            if (!el) return;
 
-        buildStackedChart('quotesChart', quotesDatasets, 'Quotes');
-        buildStackedChart('invoicesChart', invoicesDatasets, 'Invoices');
+            new Chart(el, {
+                type: 'line',
+                data: {
+                    labels: cashTrendLabels,
+                    datasets: [{
+                        label: 'Cash collected',
+                        data: cashTrendData,
+                        tension: 0.25,
+                        borderWidth: 2,
+                        pointRadius: 2
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => formatCurrencyZAR(ctx.raw ?? 0)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                callback: (v) => formatCurrencyZAR(v)
+                            }
+                        }
+                    }
+                }
+            });
+        })();
+
+        // Render existing charts
+        buildStackedChart('quotesChart', makeStackedDatasets(quotesSeries));
+        buildStackedChart('invoicesChart', makeStackedDatasets(invoicesSeries));
     </script>
 @endpush

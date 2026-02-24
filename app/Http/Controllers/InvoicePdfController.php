@@ -7,18 +7,35 @@ use App\Models\TransactionAllocation;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use App\Models\Tenant;
+use App\Services\ActivityLogger;
 
 class InvoicePdfController extends Controller
 {
     public function stream(Tenant $tenant, Invoice $invoice)
     {
         $this->authorize('pdf', $invoice);
+
+        $t = app('tenant');
+        if ($t && (int)$invoice->tenant_id === (int)$t->id) {
+            app(ActivityLogger::class)->log($t->id, 'invoice.pdf_viewed', $invoice, [
+                'invoice_number' => $invoice->invoice_number,
+            ]);
+        }
+
         return $this->render($tenant, $invoice, 'stream');
     }
 
     public function download(Tenant $tenant, Invoice $invoice)
     {
         $this->authorize('pdf', $invoice);
+
+        $t = app('tenant');
+        if ($t && (int)$invoice->tenant_id === (int)$t->id) {
+            app(ActivityLogger::class)->log($t->id, 'invoice.pdf_downloaded', $invoice, [
+                'invoice_number' => $invoice->invoice_number,
+            ]);
+        }
+
         return $this->render($tenant, $invoice, 'download');
     }
 

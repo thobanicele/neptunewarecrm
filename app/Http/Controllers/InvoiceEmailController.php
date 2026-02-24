@@ -7,6 +7,7 @@ use App\Mail\InvoiceMail;
 use App\Models\Invoice;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Mail;
+use App\Services\ActivityLogger;
 
 class InvoiceEmailController extends Controller
 {
@@ -39,6 +40,11 @@ class InvoiceEmailController extends Controller
         $pdf = Pdf::loadView('tenant.invoices.pdf', compact('tenant', 'invoice', 'watermark'));
 
         Mail::to($to)->send(new InvoiceMail($tenant, $invoice, $pdf->output()));
+
+        app(ActivityLogger::class)->log($tenant->id, 'invoice.emailed', $invoice, [
+            'invoice_number' => $invoice->invoice_number,
+            'to' => $to,
+        ]);
 
         return back()->with('success', 'Invoice emailed successfully.');
     }

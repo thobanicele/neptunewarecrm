@@ -19,6 +19,8 @@
 
         $currency = 'R';
         $money = fn($n) => $currency . ' ' . number_format((float) $n, 2);
+
+        $st = strtolower((string) ($quote->status ?? 'draft'));
     @endphp
 
     <style>
@@ -27,7 +29,6 @@
             background: #fff;
             border: 1px solid rgba(0, 0, 0, .08);
             border-radius: 12px;
-            /* ✅ FIX: give space so ribbon doesn't cover logo */
             padding: 28px 22px 22px 70px;
             position: relative;
         }
@@ -236,44 +237,30 @@
         .nw-pre {
             white-space: pre-wrap;
         }
+
+        /* Tabs */
+        .nw-tabs .nav-link {
+            font-weight: 600;
+        }
     </style>
 
     <div class="container-fluid py-4">
 
+        {{-- Top header + actions --}}
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
-                <h3 class="mb-0">{{ $quote->quote_number }}</h3>
+                <h3 class="mb-1">{{ $quote->quote_number }}</h3>
                 <div class="text-muted small">
                     Status:
-                    <span
-                        class="badge rounded-pill text-bg-{{ $pill($quote->status) }}">{{ strtoupper($quote->status) }}</span>
-                    • Total: {{ $money($grand) }}
-                    • Sales Person: {{ $quote->salesPerson?->name ?? '—' }}
-                    • Owner: {{ $quote->owner?->name ?? '—' }}
+                    <span class="badge rounded-pill text-bg-{{ $pill($quote->status) }}">
+                        {{ strtoupper($quote->status) }}
+                    </span>
                 </div>
             </div>
 
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
+
                 <a href="{{ tenant_route('tenant.quotes.index') }}" class="btn btn-light">Back</a>
-                <a href="{{ tenant_route('tenant.quotes.edit', ['quote' => $quote->id]) }}"
-                    class="btn btn-outline-secondary">Edit</a>
-                @if (tenant_feature($tenant, 'invoicing_convert_from_quote'))
-                    @can('convertToInvoice', $quote)
-                        <form method="POST" action="{{ tenant_route('tenant.quotes.convertToInvoice', $quote) }}">
-                            @csrf
-                            <button class="btn btn-primary">Convert to Invoice</button>
-                        </form>
-                    @endcan
-                @else
-                    @can('convertToInvoice', $quote)
-                        <a href="#" class="btn btn-outline-primary" data-upgrade-modal
-                            data-upgrade-text="Quote → Invoice conversion is available on the Premium plan."
-                            data-upgrade-cta="Upgrade to Premium"
-                            data-upgrade-href="{{ tenant_route('tenant.billing.upgrade') }}">
-                            Convert to Invoice <span class="badge bg-warning text-dark ms-1">PREMIUM</span>
-                        </a>
-                    @endcan
-                @endif
 
                 @can('pdf', $quote)
                     <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
@@ -282,221 +269,430 @@
                     <a href="{{ tenant_route('tenant.quotes.pdf.download', ['quote' => $quote->id]) }}"
                         class="btn btn-primary">Download</a>
                 @endcan
+
+                {{-- STATUS ACTIONS (all inside dropdown) --}}
+                @can('update', $quote)
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"
+                            aria-expanded="false">
+                            Change Status
+                        </button>
+
+                        <ul class="dropdown-menu dropdown-menu-end">
+
+                            @if ($st === 'draft')
+                                <li>
+                                    <form method="POST"
+                                        action="{{ tenant_route('tenant.quotes.markSent', ['quote' => $quote->id]) }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">Mark as Sent</button>
+                                    </form>
+                                </li>
+                            @endif
+
+                            @if (in_array($st, ['draft', 'sent'], true))
+                                <li>
+                                    <form method="POST"
+                                        action="{{ tenant_route('tenant.quotes.accept', ['quote' => $quote->id]) }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">Mark as Accepted</button>
+                                    </form>
+                                </li>
+                            @endif
+
+                            @if (in_array($st, ['draft', 'sent'], true))
+                                <li>
+                                    <form method="POST"
+                                        action="{{ tenant_route('tenant.quotes.decline', ['quote' => $quote->id]) }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item text-danger">Mark as Declined</button>
+                                    </form>
+                                </li>
+                            @endif
+
+                            @if (in_array($st, ['accepted', 'declined'], true))
+                                <li>
+                                    <form method="POST"
+                                        action="{{ tenant_route('tenant.quotes.reopen', ['quote' => $quote->id]) }}">
+                                        @csrf
+                                        <button type="submit" class="dropdown-item">Reopen (back to Sent)</button>
+                                    </form>
+                                </li>
+                            @endif
+                        </ul>
+                    </div>
+                @endcan
+
+                {{-- Convert Quote -> Sales Order --}}
+                @can('convertToInvoice', $quote)
+                    <form method="POST" action="{{ tenant_route('tenant.quotes.convertToSalesOrder', $quote) }}">
+                        @csrf
+                        <button class="btn btn-success">Convert to Sales Order</button>
+                    </form>
+                @endcan
+
             </div>
         </div>
 
+        {{-- Flash --}}
         @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                {{ session('success') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        @endif
+        @if (session('error'))
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
         @endif
 
-        <div class="nw-paper">
-
-            {{-- Ribbon --}}
-            <div class="nw-ribbon {{ strtolower((string) $quote->status) }}">
-                <span>{{ $ribbonText }}</span>
-            </div>
-
-            {{-- Header --}}
-            <div class="nw-header">
-                <div class="nw-brand">
-                    @if ($tenant->logo_path)
-                        <img class="nw-logo" src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo">
-                    @else
-                        <div class="rounded bg-light border d-flex align-items-center justify-content-center"
-                            style="height:64px; width:64px;">
-                            <span class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
-                        </div>
+        {{-- Tabs --}}
+        <ul class="nav nav-tabs nw-tabs mb-3" id="quoteTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview"
+                    type="button" role="tab" aria-controls="preview" aria-selected="true">
+                    Preview
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button"
+                    role="tab" aria-controls="activity" aria-selected="false">
+                    Activity Log
+                    @if (($quote->activityLogs?->count() ?? 0) > 0)
+                        <span class="badge bg-light text-dark border ms-1">{{ $quote->activityLogs->count() }}</span>
                     @endif
+                </button>
+            </li>
+        </ul>
 
-                    <div>
-                        <div class="fw-bold" style="font-size:18px;">{{ $tenant->name }}</div>
-                        <div class="nw-muted small">Workspace: {{ $tenant->subdomain }}</div>
+        <div class="tab-content" id="quoteTabsContent">
 
-                        @if (!empty($tenant->address))
-                            <div class="nw-muted small nw-pre" style="margin-top:8px;">{{ $tenant->address }}</div>
-                        @endif
+            {{-- Preview tab --}}
+            <div class="tab-pane fade show active" id="preview" role="tabpanel" aria-labelledby="preview-tab">
 
-                        @if (!empty($tenant->vat_number))
-                            <div class="nw-muted small" style="margin-top:6px;">VAT Number: {{ $tenant->vat_number }}</div>
-                        @endif
+                <div class="nw-paper">
+
+                    {{-- Ribbon --}}
+                    <div class="nw-ribbon {{ strtolower((string) $quote->status) }}">
+                        <span>{{ $ribbonText }}</span>
                     </div>
-                </div>
 
-                <div class="nw-title">
-                    <h1>Quote</h1>
-                    <div class="nw-quote-no"># {{ $quote->quote_number }}</div>
+                    {{-- Header --}}
+                    <div class="nw-header">
+                        <div class="nw-brand">
+                            @if ($tenant->logo_path)
+                                <img class="nw-logo" src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo">
+                            @else
+                                <div class="rounded bg-light border d-flex align-items-center justify-content-center"
+                                    style="height:64px; width:64px;">
+                                    <span
+                                        class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
+                                </div>
+                            @endif
 
-                    <div class="nw-meta">
-                        <div>Estimate Date :</div>
-                        <div><strong>{{ $quote->issued_at?->format('d/m/Y') ?? '—' }}</strong></div>
+                            <div>
+                                <div class="fw-bold" style="font-size:18px;">{{ $tenant->name }}</div>
+                                <div class="nw-muted small">Workspace: {{ $tenant->subdomain }}</div>
 
-                        <div>Expiry Date :</div>
-                        <div><strong>{{ $quote->valid_until?->format('d/m/Y') ?? '—' }}</strong></div>
+                                @if (!empty($tenant->address))
+                                    <div class="nw-muted small nw-pre" style="margin-top:8px;">{{ $tenant->address }}</div>
+                                @endif
 
-                        <div>Sales person :</div>
-                        <div><strong>{{ $quote->salesPerson?->name ?? '—' }}</strong></div>
-
-                        <div>Status :</div>
-                        <div><strong>{{ strtoupper((string) $quote->status) }}</strong></div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Parties --}}
-            <div class="nw-parties">
-                <div class="nw-box">
-                    <h6>Bill To</h6>
-                    <div class="fw-bold" style="color:#2563eb;">
-                        {{ $quote->company?->name ?? '—' }}
-                    </div>
-                    @if ($quote->company?->vat_number)
-                        <div class="nw-muted small" style="margin-top:6px;">VAT Number: {{ $quote->company->vat_number }}
+                                @if (!empty($tenant->vat_number))
+                                    <div class="nw-muted small" style="margin-top:6px;">VAT Number:
+                                        {{ $tenant->vat_number }}</div>
+                                @endif
+                            </div>
                         </div>
-                    @endif
 
-                    @if ($quote->contact)
-                        <div class="nw-muted small" style="margin-top:6px;">
-                            {{ $quote->contact->name }}
-                            @if ($quote->contact->email)
-                                • {{ $quote->contact->email }}
+                        <div class="nw-title">
+                            <h1>Quote</h1>
+                            <div class="nw-quote-no"># {{ $quote->quote_number }}</div>
+
+                            <div class="nw-meta">
+                                <div>Estimate Date :</div>
+                                <div><strong>{{ $quote->issued_at?->format('d/m/Y') ?? '—' }}</strong></div>
+
+                                <div>Expiry Date :</div>
+                                <div><strong>{{ $quote->valid_until?->format('d/m/Y') ?? '—' }}</strong></div>
+
+                                <div>Sales person :</div>
+                                <div><strong>{{ $quote->salesPerson?->name ?? '—' }}</strong></div>
+
+                                <div>Status :</div>
+                                <div><strong>{{ strtoupper((string) $quote->status) }}</strong></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Parties --}}
+                    <div class="nw-parties">
+                        <div class="nw-box">
+                            <h6>Bill To</h6>
+                            <div class="fw-bold" style="color:#2563eb;">
+                                {{ $quote->company?->name ?? '—' }}
+                            </div>
+
+                            @if ($quote->company?->vat_number)
+                                <div class="nw-muted small" style="margin-top:6px;">
+                                    VAT Number: {{ $quote->company->vat_number }}
+                                </div>
+                            @endif
+
+                            @if ($quote->contact)
+                                <div class="nw-muted small" style="margin-top:6px;">
+                                    {{ $quote->contact->name }}
+                                    @if ($quote->contact->email)
+                                        • {{ $quote->contact->email }}
+                                    @endif
+                                </div>
+                            @endif
+
+                            @if ($billTo)
+                                <div class="nw-pre small" style="margin-top:10px;">{{ $billTo }}</div>
+                            @endif
+
+                            @if (!empty($quote->company?->payment_terms))
+                                <div class="nw-muted small" style="margin-top:10px;">
+                                    Payment Terms: <strong>{{ $quote->company->payment_terms }}</strong>
+                                </div>
                             @endif
                         </div>
-                    @endif
 
-                    @if ($billTo)
-                        <div class="nw-pre small" style="margin-top:10px;">{{ $billTo }}</div>
-                    @endif
+                        <div class="nw-box">
+                            <h6>Ship To</h6>
+                            <div class="fw-bold">
+                                {{ $quote->company?->name ?? '—' }}
+                            </div>
 
-                    @if (!empty($quote->company?->payment_terms))
-                        <div class="nw-muted small" style="margin-top:10px;">
-                            Payment Terms: <strong>{{ $quote->company->payment_terms }}</strong>
+                            @if ($shipTo)
+                                <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>
+                            @else
+                                <div class="nw-muted small" style="margin-top:10px;">—</div>
+                            @endif
                         </div>
-                    @endif
-                </div>
-
-                <div class="nw-box">
-                    <h6>Ship To</h6>
-                    <div class="fw-bold">
-                        {{ $quote->company?->name ?? '—' }}
                     </div>
 
-                    @if ($shipTo)
-                        <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>
-                    @else
-                        <div class="nw-muted small" style="margin-top:10px;">—</div>
-                    @endif
+                    {{-- Items --}}
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">#</th>
+                                <th>Item &amp; Description</th>
+                                <th class="nw-right" style="width:90px;">Qty</th>
+                                <th class="nw-right" style="width:120px;">Rate</th>
+                                <th class="nw-right" style="width:140px;">VAT Amt</th>
+                                <th class="nw-right" style="width:140px;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($quote->items as $idx => $it)
+                                @php
+                                    $line = (float) $it->line_total;
+                                    $lineVat = (float) $it->tax_amount;
+                                    $incl = $line + $lineVat;
+                                @endphp
+                                <tr>
+                                    <td class="nw-right">{{ $idx + 1 }}</td>
+                                    <td>
+                                        <div class="fw-semibold">{{ $it->name }}</div>
+                                        @if (!empty($it->sku))
+                                            <span class="nw-item-sku">SKU : {{ $it->sku }}</span>
+                                        @endif
+                                        @if (!empty($it->description))
+                                            <div class="nw-muted" style="margin-top:6px;">{{ $it->description }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="nw-right">
+                                        {{ number_format((float) $it->qty, 2) }}
+                                        @if (!empty($it->unit))
+                                            <div class="nw-muted small">{{ $it->unit }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="nw-right">{{ $money((float) $it->unit_price) }}</td>
+                                    <td class="nw-right">{{ $money($lineVat) }}</td>
+                                    <td class="nw-right"><strong>{{ $money($incl) }}</strong></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    {{-- Totals --}}
+                    <div class="nw-totals-wrap">
+                        <table class="nw-totals">
+                            <tr>
+                                <td class="label nw-right">Sub Total</td>
+                                <td class="nw-right strong">{{ $money($sub) }}</td>
+                            </tr>
+
+                            @if ((float) ($quote->discount_amount ?? 0) > 0)
+                                <tr>
+                                    <td class="label nw-right">Discount</td>
+                                    <td class="nw-right strong">- {{ $money((float) $quote->discount_amount) }}</td>
+                                </tr>
+                            @endif
+
+                            <tr>
+                                <td class="label nw-right">
+                                    {{ $quote->items->firstWhere('tax_name')?->tax_name ?? 'VAT' }}
+                                    @php $rate = $quote->items->firstWhere('tax_name')?->tax_rate; @endphp
+                                    @if ($rate !== null)
+                                        ({{ number_format((float) $rate, 2) }}%)
+                                    @endif
+                                </td>
+                                <td class="nw-right strong">{{ $money($vat) }}</td>
+                            </tr>
+
+                            <tr class="total-row">
+                                <td class="nw-right">Total</td>
+                                <td class="nw-right">{{ $money($grand) }}</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    {{-- Notes / Terms + Banking --}}
+                    <div class="nw-footer-grid">
+                        <div class="nw-box">
+                            <h6>Terms &amp; Conditions</h6>
+
+                            @if (!empty($tenant->bank_details))
+                                <div class="fw-semibold">Banking details:</div>
+                                <div class="nw-muted small nw-pre" style="margin-top:6px;">{{ $tenant->bank_details }}
+                                </div>
+                                <div class="nw-hr"></div>
+                            @endif
+
+                            @if ($quote->terms)
+                                <div class="nw-pre small">{{ $quote->terms }}</div>
+                            @else
+                                <div class="nw-muted small">—</div>
+                            @endif
+                        </div>
+
+                        <div class="nw-box">
+                            <h6>Notes</h6>
+                            @if ($quote->notes)
+                                <div class="nw-pre small">{{ $quote->notes }}</div>
+                            @else
+                                <div class="nw-muted small">—</div>
+                            @endif
+
+                            <div class="nw-hr"></div>
+
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <div class="nw-muted small">Prepared by</div>
+                                    <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="nw-muted small">Accepted by (Client)</div>
+                                    <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
+                                </div>
+                                <div class="col-12">
+                                    <div class="nw-muted small">Date</div>
+                                    <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
-            {{-- Items --}}
-            <table class="nw-table">
-                <thead>
-                    <tr>
-                        <th style="width:50px;">#</th>
-                        <th>Item &amp; Description</th>
-                        <th class="nw-right" style="width:90px;">Qty</th>
-                        <th class="nw-right" style="width:120px;">Rate</th>
-                        <th class="nw-right" style="width:140px;">VAT Amt</th>
-                        <th class="nw-right" style="width:140px;">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($quote->items as $idx => $it)
+            {{-- Activity Log tab --}}
+            <div class="tab-pane fade" id="activity" role="tabpanel" aria-labelledby="activity-tab">
+                <div class="card">
+                    <div class="card-body">
                         @php
-                            $line = (float) $it->line_total;
-                            $lineVat = (float) $it->tax_amount;
-                            $incl = $line + $lineVat;
+                            $logs = ($quote->activityLogs ?? collect())->take(50);
+
+                            $label = function ($action) {
+                                return match ($action) {
+                                    'quote.created' => 'Created',
+                                    'quote.updated' => 'Updated',
+                                    'quote.status_changed' => 'Status changed',
+                                    'quote.pdf_viewed' => 'PDF viewed',
+                                    'quote.pdf_downloaded' => 'PDF downloaded',
+                                    'quote.converted_to_sales_order' => 'Converted to Sales Order',
+                                    default => $action,
+                                };
+                            };
+
+                            $badge = function ($action) {
+                                return match ($action) {
+                                    'quote.created' => 'bg-light text-dark border',
+                                    'quote.updated' => 'bg-info text-dark',
+                                    'quote.status_changed' => 'bg-warning text-dark',
+                                    'quote.pdf_viewed' => 'bg-secondary',
+                                    'quote.pdf_downloaded' => 'bg-secondary',
+                                    'quote.converted_to_sales_order' => 'bg-success',
+                                    default => 'bg-light text-dark border',
+                                };
+                            };
                         @endphp
-                        <tr>
-                            <td class="nw-right">{{ $idx + 1 }}</td>
-                            <td>
-                                <div class="fw-semibold">{{ $it->name }}</div>
-                                @if (!empty($it->sku))
-                                    <span class="nw-item-sku">SKU : {{ $it->sku }}</span>
-                                @endif
-                                @if (!empty($it->description))
-                                    <div class="nw-muted" style="margin-top:6px;">{{ $it->description }}</div>
-                                @endif
-                            </td>
-                            <td class="nw-right">
-                                {{ number_format((float) $it->qty, 2) }}
-                                @if (!empty($it->unit))
-                                    <div class="nw-muted small">{{ $it->unit }}</div>
-                                @endif
-                            </td>
-                            <td class="nw-right">{{ $money((float) $it->unit_price) }}</td>
-                            <td class="nw-right">{{ $money($lineVat) }}</td>
-                            <td class="nw-right"><strong>{{ $money($incl) }}</strong></td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
 
-            {{-- Totals --}}
-            <div class="nw-totals-wrap">
-                <table class="nw-totals">
-                    <tr>
-                        <td class="label nw-right">Sub Total</td>
-                        <td class="nw-right strong">{{ $money($sub) }}</td>
-                    </tr>
-                    <tr>
-                        <td class="label nw-right">
-                            {{ $quote->items->firstWhere('tax_name')?->tax_name ?? 'VAT' }}
-                            @php $rate = $quote->items->firstWhere('tax_name')?->tax_rate; @endphp
-                            @if ($rate !== null)
-                                ({{ number_format((float) $rate, 2) }}%)
-                            @endif
-                        </td>
-                        <td class="nw-right strong">{{ $money($vat) }}</td>
-                    </tr>
-                    <tr class="total-row">
-                        <td class="nw-right">Total</td>
-                        <td class="nw-right">{{ $money($grand) }}</td>
-                    </tr>
-                </table>
-            </div>
+                        @if ($logs->isEmpty())
+                            <div class="text-muted small">No activity yet.</div>
+                        @else
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 170px;">When</th>
+                                            <th>Activity</th>
+                                            <th style="width: 180px;">By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($logs as $log)
+                                            @php
+                                                $meta = $log->meta ?? [];
+                                                $from = data_get($meta, 'from');
+                                                $to = data_get($meta, 'to');
+                                            @endphp
 
-            {{-- Notes / Terms + Banking --}}
-            <div class="nw-footer-grid">
-                <div class="nw-box">
-                    <h6>Terms &amp; Conditions</h6>
+                                            <tr>
+                                                <td class="text-muted small">
+                                                    {{ $log->created_at?->format('d/m/Y H:i') }}
+                                                </td>
+                                                <td>
+                                                    <span class="badge {{ $badge($log->action) }}">
+                                                        {{ $label($log->action) }}
+                                                    </span>
 
-                    @if (!empty($tenant->bank_details))
-                        <div class="fw-semibold">Banking details:</div>
-                        <div class="nw-muted small nw-pre" style="margin-top:6px;">{{ $tenant->bank_details }}</div>
-                        <div class="nw-hr"></div>
-                    @endif
+                                                    @if ($log->action === 'quote.status_changed')
+                                                        <span class="ms-2">
+                                                            <span
+                                                                class="badge bg-light text-dark border">{{ strtoupper((string) $from) }}</span>
+                                                            →
+                                                            <span
+                                                                class="badge bg-primary">{{ strtoupper((string) $to) }}</span>
+                                                        </span>
+                                                    @endif
 
-                    @if ($quote->terms)
-                        <div class="nw-pre small">{{ $quote->terms }}</div>
-                    @else
-                        <div class="nw-muted small">—</div>
-                    @endif
-                </div>
+                                                    @if ($log->action === 'quote.converted_to_sales_order')
+                                                        <div class="text-muted small mt-1">
+                                                            SO: {{ data_get($meta, 'sales_order_number', '—') }}
+                                                        </div>
+                                                    @endif
 
-                <div class="nw-box">
-                    <h6>Notes</h6>
-                    @if ($quote->notes)
-                        <div class="nw-pre small">{{ $quote->notes }}</div>
-                    @else
-                        <div class="nw-muted small">—</div>
-                    @endif
-
-                    <div class="nw-hr"></div>
-
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <div class="nw-muted small">Prepared by</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="nw-muted small">Accepted by (Client)</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
-                        <div class="col-12">
-                            <div class="nw-muted small">Date</div>
-                            <div style="border-bottom:1px solid rgba(0,0,0,.25); height:22px;"></div>
-                        </div>
+                                                    @if (!empty(data_get($meta, 'note')))
+                                                        <div class="text-muted small mt-1">
+                                                            {{ data_get($meta, 'note') }}
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td class="text-muted small">
+                                                    {{ $log->user?->name ?? 'System' }}
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
