@@ -97,6 +97,7 @@
             }
         @endphp
 
+
         {{-- Branding form --}}
         <div class="card">
             <div class="card-body">
@@ -111,6 +112,7 @@
 
                     <div class="text-muted small">
                         Storage: <span class="badge bg-light text-dark border">{{ $logoDisk }}</span>
+
                     </div>
                 </div>
 

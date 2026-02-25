@@ -22,15 +22,15 @@
                     </a>
                 </li>
 
-                <li class="nav-item">
+                {{-- <li class="nav-item">
                     <a class="nav-link py-1 {{ request()->routeIs('shop.*') ? 'active' : '' }}"
                         href="#">
                         Shop
                     </a>
-                </li>
+                </li> --}}
 
                 {{-- Other Products dropdown --}}
-                <li class="nav-item dropdown">
+                {{-- <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle py-1 {{ request()->routeIs('products.*') ? 'active' : '' }}"
                         href="#" id="otherProductsDropdown" role="button" data-bs-toggle="dropdown"
                         aria-expanded="false">
@@ -62,7 +62,7 @@
                             </a>
                         </li>
                     </ul>
-                </li>
+                </li> --}}
             </ul>
 
             {{-- Right links --}}
