@@ -125,27 +125,6 @@ class TenantSettingsController extends Controller
         $tenant->subdomain = $data['subdomain'];
         $tenant->save();
 
-        try {
-        $exists = Storage::disk($disk)->exists($tenant->logo_path);
-        $url = Storage::disk($disk)->url($tenant->logo_path);
-        } catch (\Throwable $e) {
-            \Log::error('Tenant logo disk exists() failed', [
-                'disk' => $disk,
-                'path' => $tenant->logo_path,
-                'error' => $e->getMessage(),
-                'class' => get_class($e),
-            ]);
-            $exists = null;
-            $url = null;
-        }
-
-        \Log::info('Logo upload debug', [
-            'disk' => $disk,
-            'path' => $tenant->logo_path,
-            'exists' => $exists,
-            'url' => $url,
-        ]);
-
         // Redirect if subdomain changed
         if ($oldSubdomain !== $tenant->subdomain) {
             return redirect()

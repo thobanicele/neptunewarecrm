@@ -543,4 +543,7 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
     })->name('admin.dashboard');
 });
 
+Route::get('/t/{tenant}/branding/logo', [\App\Http\Controllers\TenantBrandingLogoController::class, 'show'])
+    ->name('tenant.branding.logo');
+
 require __DIR__ . '/auth.php';

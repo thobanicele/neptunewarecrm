@@ -163,8 +163,8 @@
                             @if ($tenant->logo_path)
                                 <div class="mt-2 d-flex align-items-center gap-3">
                                     @if ($logoUrl)
-                                        <img src="{{ $logoUrl }}" alt="Logo"
-                                            style="height:56px; width:auto; max-width:180px;"
+                                        <img src="{{ tenant_route('tenant.branding.logo', ['tenant' => $tenant->subdomain]) }}?v={{ urlencode($tenant->updated_at) }}"
+                                            alt="Logo" style="height:56px; width:auto; max-width:180px;"
                                             class="border rounded p-1 bg-white">
                                     @else
                                         <div class="text-muted small">Logo is set but URL could not be generated.</div>
