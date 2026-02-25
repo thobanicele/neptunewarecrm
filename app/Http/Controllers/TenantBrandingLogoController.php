@@ -2,28 +2,54 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Tenant;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TenantBrandingLogoController extends Controller
 {
-    public function show(string $tenant)
+    public function show(Tenant $tenant)
     {
-        $tenantModel = app('tenant'); // your middleware sets this
+        // Your IdentifyTenantFromPath middleware sets app('tenant') for access control.
+        $ctx = app('tenant');
 
-        abort_unless($tenantModel && $tenantModel->subdomain === $tenant, 404);
-        abort_unless($tenantModel->logo_path, 404);
+        // Safety: ensure route tenant matches resolved tenant context
+        abort_unless($ctx && (int) $ctx->id === (int) $tenant->id, 404);
+        abort_unless(!empty($tenant->logo_path), 404);
 
-        $disk = config('filesystems.tenant_logo_disk', 'tenant_logos');
+        $disk = (string) config('filesystems.tenant_logo_disk', 'tenant_logos');
 
-        abort_unless(Storage::disk($disk)->exists($tenantModel->logo_path), 404);
+        try {
+            $storage = Storage::disk($disk);
 
-        $stream = Storage::disk($disk)->readStream($tenantModel->logo_path);
+            // exists() can throw on misconfigured S3/R2; don't 500 the whole UI
+            $exists = $storage->exists($tenant->logo_path);
+            abort_unless($exists, 404);
 
-        return response()->stream(function () use ($stream) {
-            fpassthru($stream);
-        }, 200, [
-            'Content-Type' => Storage::disk($disk)->mimeType($tenantModel->logo_path) ?: 'image/png',
-            'Cache-Control' => 'public, max-age=3600',
-        ]);
+            $stream = $storage->readStream($tenant->logo_path);
+            abort_unless($stream !== false, 404);
+
+            $mime = $storage->mimeType($tenant->logo_path) ?: 'image/png';
+
+            return response()->stream(function () use ($stream) {
+                fpassthru($stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }, 200, [
+                'Content-Type' => $mime,
+                'Cache-Control' => 'public, max-age=3600',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Branding logo fetch failed', [
+                'tenant_id' => $tenant->id,
+                'disk' => $disk,
+                'path' => $tenant->logo_path,
+                'error' => $e->getMessage(),
+                'class' => get_class($e),
+            ]);
+
+            abort(404);
+        }
     }
 }
