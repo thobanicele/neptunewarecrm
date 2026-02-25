@@ -83,32 +83,18 @@
                 </div>
             </div>
         </div>
+
         @php
+            // purely informational badge
             $logoDisk = config('filesystems.tenant_logo_disk', 'tenant_logos');
-            $logoUrl = null;
 
-            if (!empty($tenant->logo_path)) {
-                try {
-                    // Try public URL first
-                    $logoUrl = Storage::disk($logoDisk)->url($tenant->logo_path);
-
-                    // Optional: if your disk returns relative URLs sometimes, make absolute
-                    // $logoUrl = \Illuminate\Support\Str::startsWith($logoUrl, ['http://','https://'])
-                    //     ? $logoUrl
-                    //     : url($logoUrl);
-                } catch (\Throwable $e) {
-                    $logoUrl = null;
-                }
-
-                // Fallback: signed URL (works when bucket is private)
-                if (!$logoUrl) {
-                    try {
-                        $logoUrl = Storage::disk($logoDisk)->temporaryUrl($tenant->logo_path, now()->addMinutes(30));
-                    } catch (\Throwable $e) {
-                        $logoUrl = null;
-                    }
-                }
-            }
+            // logo served through app controller (works even if bucket is private)
+            $hasLogo = !empty($tenant->logo_path);
+            $logoSrc = $hasLogo
+                ? tenant_route('tenant.branding.logo', ['tenant' => $tenant->subdomain ?? $tenant]) .
+                    '?v=' .
+                    optional($tenant->updated_at)->timestamp
+                : null;
         @endphp
 
         {{-- Branding form --}}
@@ -125,7 +111,6 @@
 
                     <div class="text-muted small">
                         Storage: <span class="badge bg-light text-dark border">{{ $logoDisk }}</span>
-
                     </div>
                 </div>
 
@@ -160,15 +145,16 @@
                             <input type="file" name="logo" class="form-control" accept="image/*">
                             <div class="form-text">Recommended: transparent PNG/WebP, square-ish, 512×512.</div>
 
-                            @if ($tenant->logo_path)
+                            @if ($hasLogo)
                                 <div class="mt-2 d-flex align-items-center gap-3">
-                                    @if ($logoUrl)
-                                        <img src="{{ tenant_route('tenant.branding.logo', ['tenant' => $tenant->subdomain]) }}?v={{ urlencode($tenant->updated_at) }}"
-                                            alt="Logo" style="height:56px; width:auto; max-width:180px;"
-                                            class="border rounded p-1 bg-white">
-                                    @else
-                                        <div class="text-muted small">Logo is set but URL could not be generated.</div>
-                                    @endif
+                                    <img src="{{ $logoSrc }}" alt="Logo"
+                                        style="height:56px; width:auto; max-width:180px;"
+                                        class="border rounded p-1 bg-white"
+                                        onerror="this.style.display='none'; this.closest('.d-flex')?.querySelector('.logo-fallback')?.classList.remove('d-none');">
+
+                                    <div class="logo-fallback d-none text-muted small">
+                                        Logo is set but could not be loaded.
+                                    </div>
 
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" value="1" name="remove_logo"

@@ -19,17 +19,28 @@ class TenantBrandingLogoController extends Controller
         try {
             $storage = Storage::disk($disk);
 
+            // Build a stable ETag from tenant + logo path + updated_at
+            $etag = sha1($tenant->id . '|' . $tenant->logo_path . '|' . optional($tenant->updated_at)->timestamp);
+
+            // If browser already has it, return 304
+            $ifNoneMatch = request()->headers->get('If-None-Match');
+            if ($ifNoneMatch && trim($ifNoneMatch, '"') === $etag) {
+                return response('', 304, [
+                    'ETag' => "\"{$etag}\"",
+                    'Cache-Control' => 'public, max-age=3600',
+                ]);
+            }
+
             $stream = $storage->readStream($tenant->logo_path);
 
-            // ✅ readStream may return null/false depending on driver
             if (!is_resource($stream)) {
+                // Optional: keep this as debug-level if it’s noisy
                 Log::warning('Branding logo stream not readable', [
                     'tenant_id' => $tenant->id,
                     'disk' => $disk,
                     'path' => $tenant->logo_path,
                     'stream_type' => gettype($stream),
                 ]);
-
                 abort(404);
             }
 
@@ -46,6 +57,7 @@ class TenantBrandingLogoController extends Controller
             }, 200, [
                 'Content-Type' => $mime,
                 'Cache-Control' => 'public, max-age=3600',
+                'ETag' => "\"{$etag}\"",
             ]);
         } catch (\Throwable $e) {
             $prev = $e->getPrevious();
