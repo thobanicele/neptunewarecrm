@@ -41,15 +41,15 @@ class TenantBrandingLogoController extends Controller
                 'Cache-Control' => 'public, max-age=3600',
             ]);
         } catch (\Throwable $e) {
-            Log::error('Branding logo fetch failed', [
-                'tenant_id' => $tenant->id,
-                'disk' => $disk,
-                'path' => $tenant->logo_path,
-                'error' => $e->getMessage(),
-                'class' => get_class($e),
-            ]);
+    Log::error('Branding logo fetch failed: ' . $e->getMessage(), [
+        'tenant_id' => $tenant->id,
+        'disk' => $disk,
+        'path' => $tenant->logo_path,
+        'class' => get_class($e),
+        'code' => $e->getCode(),
+    ]);
 
-            abort(404);
-        }
+    abort(404);
+}
     }
 }
