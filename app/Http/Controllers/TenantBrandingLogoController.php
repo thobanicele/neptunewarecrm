@@ -3,17 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tenant;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TenantBrandingLogoController extends Controller
 {
     public function show(Tenant $tenant)
     {
-        // Your IdentifyTenantFromPath middleware sets app('tenant') for access control.
         $ctx = app('tenant');
 
-        // Safety: ensure route tenant matches resolved tenant context
         abort_unless($ctx && (int) $ctx->id === (int) $tenant->id, 404);
         abort_unless(!empty($tenant->logo_path), 404);
 
@@ -22,10 +19,7 @@ class TenantBrandingLogoController extends Controller
         try {
             $storage = Storage::disk($disk);
 
-            // exists() can throw on misconfigured S3/R2; don't 500 the whole UI
-            $exists = $storage->exists($tenant->logo_path);
-            abort_unless($exists, 404);
-
+            // ✅ Avoid exists() (HEAD) — it can fail on some S3-compatible configs
             $stream = $storage->readStream($tenant->logo_path);
             abort_unless($stream !== false, 404);
 
@@ -41,15 +35,18 @@ class TenantBrandingLogoController extends Controller
                 'Cache-Control' => 'public, max-age=3600',
             ]);
         } catch (\Throwable $e) {
-    Log::error('Branding logo fetch failed: ' . $e->getMessage(), [
-        'tenant_id' => $tenant->id,
-        'disk' => $disk,
-        'path' => $tenant->logo_path,
-        'class' => get_class($e),
-        'code' => $e->getCode(),
-    ]);
+            $prev = $e->getPrevious();
 
-    abort(404);
-}
+            \Log::error('Branding logo fetch failed: ' . $e->getMessage(), [
+                'tenant_id' => $tenant->id,
+                'disk' => $disk,
+                'path' => $tenant->logo_path,
+                'class' => get_class($e),
+                'prev_class' => $prev ? get_class($prev) : null,
+                'prev_message' => $prev ? $prev->getMessage() : null,
+            ]);
+
+            abort(404);
+        }
     }
 }
