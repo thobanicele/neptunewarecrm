@@ -3,21 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tenant;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TenantBrandingLogoController extends Controller
 {
     public function show(Tenant $tenant)
     {
-        // Source of truth: resolved tenant context from middleware
         $ctx = app('tenant');
-
-        // If this fails, the route is not inside your tenant middleware group
-        abort_unless($ctx instanceof Tenant, 404);
-
-        // Ensure route tenant matches context
-        abort_unless((int) $ctx->id === (int) $tenant->id, 404);
-
+        abort_unless($ctx instanceof Tenant && (int) $ctx->id === (int) $tenant->id, 404);
         abort_unless(!empty($tenant->logo_path), 404);
 
         $disk = (string) config('filesystems.tenant_logo_disk', 'tenant_logos');
@@ -26,14 +20,28 @@ class TenantBrandingLogoController extends Controller
             $storage = Storage::disk($disk);
 
             $stream = $storage->readStream($tenant->logo_path);
-            abort_unless($stream !== false, 404);
+
+            // ✅ readStream may return null/false depending on driver
+            if (!is_resource($stream)) {
+                Log::warning('Branding logo stream not readable', [
+                    'tenant_id' => $tenant->id,
+                    'disk' => $disk,
+                    'path' => $tenant->logo_path,
+                    'stream_type' => gettype($stream),
+                ]);
+
+                abort(404);
+            }
 
             $mime = $storage->mimeType($tenant->logo_path) ?: 'image/png';
 
             return response()->stream(function () use ($stream) {
-                fpassthru($stream);
-                if (is_resource($stream)) {
-                    fclose($stream);
+                try {
+                    fpassthru($stream);
+                } finally {
+                    if (is_resource($stream)) {
+                        fclose($stream);
+                    }
                 }
             }, 200, [
                 'Content-Type' => $mime,
@@ -42,7 +50,7 @@ class TenantBrandingLogoController extends Controller
         } catch (\Throwable $e) {
             $prev = $e->getPrevious();
 
-            \Log::error('Branding logo fetch failed: ' . $e->getMessage(), [
+            Log::error('Branding logo fetch failed: ' . $e->getMessage(), [
                 'tenant_id' => $tenant->id,
                 'disk' => $disk,
                 'path' => $tenant->logo_path,
