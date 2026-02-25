@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use App\Models\Activity;
 use App\Support\TenantPlan;
+use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Notifications\Messages\MailMessage;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,6 +47,16 @@ class AppServiceProvider extends ServiceProvider
 
         Blade::if('feature', fn(string $f) => TenantPlan::currentFeature($f));
         Schema::defaultStringLength(191);
+
+        VerifyEmail::toMailUsing(function ($notifiable, $url) {
+            return (new MailMessage)
+                ->subject('Verify your NeptuneWare CRM email')
+                ->greeting('Welcome to NeptuneWare CRM 👋')
+                ->line('Please verify your email address to activate your workspace.')
+                ->action('Verify Email', $url)
+                ->line('If you did not create an account, you can ignore this email.')
+                ->salutation('Regards, NeptuneWare CRM');
+        });
 
         View::composer('layouts.backend.part.sidebar', function ($view) {
             // ✅ tenant-safe: sidebar may render on non-tenant routes (/login, /email/verify, etc.)
