@@ -171,6 +171,8 @@ Route::prefix('t/{tenant:subdomain}')
         'tenant.last_seen', // ✅ NEW: update tenant last_seen_at (register alias in Kernel)
     ])
     ->group(function () {
+        Route::get('branding/logo', [\App\Http\Controllers\TenantBrandingLogoController::class, 'show'])
+            ->name('tenant.branding.logo');
 
         /*
         |--------------------------------------------------------------------------
@@ -542,8 +544,5 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
         return 'Super Admin Panel';
     })->name('admin.dashboard');
 });
-
-Route::get('/t/{tenant}/branding/logo', [\App\Http\Controllers\TenantBrandingLogoController::class, 'show'])
-    ->name('tenant.branding.logo');
 
 require __DIR__ . '/auth.php';
