@@ -64,23 +64,13 @@ return [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
-
-            // IMPORTANT: region must be a real string for AWS SDK
             'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
-
             'bucket' => env('AWS_BUCKET'),
-
-            // Make sure this is your PUBLIC base URL for the bucket (Laravel Cloud provides one)
-            'url' => env('AWS_URL'),
-
             'endpoint' => env('AWS_ENDPOINT'),
+            'url' => env('AWS_URL'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', true),
-
-            // Needed for direct <img src="..."> URLs (if your bucket allows public read)
             'visibility' => 'public',
-
             'throw' => false,
-            'report' => false,
         ],
 
     ],
