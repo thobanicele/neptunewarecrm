@@ -125,6 +125,13 @@ class TenantSettingsController extends Controller
         $tenant->subdomain = $data['subdomain'];
         $tenant->save();
 
+        \Log::info('Logo upload debug', [
+            'disk' => $disk,
+            'path' => $tenant->logo_path,
+            'exists' => Storage::disk($disk)->exists($tenant->logo_path),
+            'url' => Storage::disk($disk)->url($tenant->logo_path),
+        ]);
+
         // Redirect if subdomain changed
         if ($oldSubdomain !== $tenant->subdomain) {
             return redirect()
