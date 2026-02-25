@@ -25,7 +25,7 @@ class DiskCheck extends Command
             $content = $storage->get('healthchecks/ping.txt');
             $this->info('GET: ' . substr($content, 0, 60));
 
-            $exists = $storage->exists('healthchecks/ping.txt');
+            $storage->get('healthchecks/ping.txt'); // GET is enough
             $this->info('EXISTS: ' . ($exists ? 'YES' : 'NO'));
 
             return self::SUCCESS;
