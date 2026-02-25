@@ -98,18 +98,23 @@ class TenantSettingsController extends Controller
         }
 
         // Upload logo (stable filename)
+        // Upload logo (stable filename)
         if ($request->hasFile('logo')) {
             if ($tenant->logo_path) {
                 Storage::disk($disk)->delete($tenant->logo_path);
             }
 
             $file = $request->file('logo');
-            $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+            $ext  = strtolower($file->getClientOriginalExtension() ?: 'png');
 
-            $path = $file->storePubliclyAs(
+            $path = "tenants/{$tenant->id}/branding/logo.{$ext}";
+
+            // Put with explicit public visibility (works better across S3/R2)
+            Storage::disk($disk)->putFileAs(
                 "tenants/{$tenant->id}/branding",
+                $file,
                 "logo.{$ext}",
-                $disk
+                ['visibility' => 'public']
             );
 
             $tenant->logo_path = $path;

@@ -83,20 +83,33 @@
                 </div>
             </div>
         </div>
-
         @php
             $logoDisk = config('filesystems.tenant_logo_disk', 'tenant_logos');
             $logoUrl = null;
 
             if (!empty($tenant->logo_path)) {
                 try {
+                    // Try public URL first
                     $logoUrl = Storage::disk($logoDisk)->url($tenant->logo_path);
+
+                    // Optional: if your disk returns relative URLs sometimes, make absolute
+                    // $logoUrl = \Illuminate\Support\Str::startsWith($logoUrl, ['http://','https://'])
+                    //     ? $logoUrl
+                    //     : url($logoUrl);
                 } catch (\Throwable $e) {
                     $logoUrl = null;
                 }
+
+                // Fallback: signed URL (works when bucket is private)
+                if (!$logoUrl) {
+                    try {
+                        $logoUrl = Storage::disk($logoDisk)->temporaryUrl($tenant->logo_path, now()->addMinutes(30));
+                    } catch (\Throwable $e) {
+                        $logoUrl = null;
+                    }
+                }
             }
         @endphp
-
 
         {{-- Branding form --}}
         <div class="card">
