@@ -64,7 +64,7 @@ return [
          * The temporary directory is required to download remote images and when
          * using the PDFLib back end.
          */
-        'temp_dir' => sys_get_temp_dir(),
+        'temp_dir' => storage_path('app/tmp'),
 
         /**
          * ==== IMPORTANT ====
@@ -78,7 +78,11 @@ return [
          * direct class use like:
          * $dompdf = new DOMPDF();  $dompdf->load_html($htmldata); $dompdf->render(); $pdfdata = $dompdf->output();
          */
-        'chroot' => realpath(base_path()),
+        'chroot' => [
+            realpath(base_path()),
+            realpath(public_path()),
+            realpath(storage_path()),
+        ],
 
         /**
          * Protocol whitelist

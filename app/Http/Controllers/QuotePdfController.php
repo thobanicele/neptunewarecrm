@@ -52,13 +52,12 @@ class QuotePdfController extends Controller
 
     public function stream(Tenant $tenant, Quote $quote)
     {
-        // ✅ give DomPDF breathing room
-        @ini_set('memory_limit', '512M');
-        @set_time_limit(120);
+        @ini_set('memory_limit', '768M');
+        @set_time_limit(180);
 
         $tenant = app('tenant');
         $this->authorize('view', $quote);
-        abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
 
         $quote->load([
             'items' => fn ($q) => $q->orderBy('position'),
@@ -74,13 +73,29 @@ class QuotePdfController extends Controller
 
         $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
-        Log::info('PDF stream start', ['quote_id' => $quote->id, 'tenant_id' => $tenant->id]);
-
         try {
-            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'));
-            Log::info('PDF stream rendered', ['quote_id' => $quote->id]);
+            \Log::info('PDF render start', ['quote_id' => $quote->id]);
 
-            return $pdf->stream($quote->quote_number . '.pdf');
+            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant','quote','pdfLogoPath'))
+                ->setPaper('a4');
+
+            // ✅ Render NOW (not later)
+            $bytes = $pdf->output();
+
+            \Log::info('PDF render done', ['quote_id' => $quote->id, 'bytes' => strlen($bytes)]);
+
+            return response($bytes, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$quote->quote_number.'.pdf"',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('PDF render failed: '.$e->getMessage(), [
+                'quote_id' => $quote->id,
+                'tenant_id' => $tenant->id,
+                'class' => get_class($e),
+                'prev' => $e->getPrevious()?->getMessage(),
+            ]);
+            abort(500, 'PDF generation failed.');
         } finally {
             if ($pdfLogoPath && file_exists($pdfLogoPath)) {
                 @unlink($pdfLogoPath);
@@ -90,12 +105,12 @@ class QuotePdfController extends Controller
 
     public function download(Tenant $tenant, Quote $quote)
     {
-        @ini_set('memory_limit', '512M');
-        @set_time_limit(120);
+        @ini_set('memory_limit', '768M');
+        @set_time_limit(180);
 
         $tenant = app('tenant');
         $this->authorize('view', $quote);
-        abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
+        abort_unless((int)$quote->tenant_id === (int)$tenant->id, 404);
 
         $quote->load([
             'items' => fn ($q) => $q->orderBy('position'),
@@ -111,13 +126,28 @@ class QuotePdfController extends Controller
 
         $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
-        Log::info('PDF download start', ['quote_id' => $quote->id, 'tenant_id' => $tenant->id]);
-
         try {
-            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'));
-            Log::info('PDF download rendered', ['quote_id' => $quote->id]);
+            \Log::info('PDF download render start', ['quote_id' => $quote->id]);
 
-            return $pdf->download($quote->quote_number . '.pdf');
+            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant','quote','pdfLogoPath'))
+                ->setPaper('a4');
+
+            $bytes = $pdf->output();
+
+            \Log::info('PDF download render done', ['quote_id' => $quote->id, 'bytes' => strlen($bytes)]);
+
+            return response($bytes, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="'.$quote->quote_number.'.pdf"',
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('PDF download render failed: '.$e->getMessage(), [
+                'quote_id' => $quote->id,
+                'tenant_id' => $tenant->id,
+                'class' => get_class($e),
+                'prev' => $e->getPrevious()?->getMessage(),
+            ]);
+            abort(500, 'PDF generation failed.');
         } finally {
             if ($pdfLogoPath && file_exists($pdfLogoPath)) {
                 @unlink($pdfLogoPath);
