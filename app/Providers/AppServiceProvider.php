@@ -45,6 +45,10 @@ class AppServiceProvider extends ServiceProvider
             return $user->hasRole('super_admin') ? true : null;
         });
 
+        if (app()->environment('production')) {
+            error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+        }
+
         Blade::if('feature', fn(string $f) => TenantPlan::currentFeature($f));
         Schema::defaultStringLength(191);
 

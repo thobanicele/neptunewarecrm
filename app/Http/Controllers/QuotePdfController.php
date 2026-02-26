@@ -6,6 +6,7 @@ use App\Models\Quote;
 use App\Models\Tenant;
 use App\Services\ActivityLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class QuotePdfController extends Controller
@@ -19,42 +20,42 @@ class QuotePdfController extends Controller
         $disk = (string) config('filesystems.tenant_logo_disk', 'tenant_logos');
 
         try {
-            $storage = Storage::disk($disk);
+            $bytes = Storage::disk($disk)->get($tenant->logo_path);
+            if (!$bytes) return null;
 
-            // Avoid exists() (HEAD) - just try to get
-            $bytes = $storage->get($tenant->logo_path);
-
-            if (!$bytes) {
+            $tmpDir = storage_path('app/tmp');
+            if (!is_dir($tmpDir)) {
+                @mkdir($tmpDir, 0775, true);
+            }
+            if (!is_writable($tmpDir)) {
+                Log::warning('PDF tmp dir not writable', ['tmp' => $tmpDir]);
                 return null;
             }
 
             $ext = pathinfo($tenant->logo_path, PATHINFO_EXTENSION) ?: 'png';
-            $tmp = storage_path('app/tmp');
 
-            if (!is_dir($tmp)) {
-                @mkdir($tmp, 0775, true);
-            }
-
-            $localPath = $tmp . '/tenant_logo_' . $tenant->id . '.' . $ext;
+            // ✅ unique per request (avoids collisions)
+            $localPath = $tmpDir . '/tenant_logo_' . $tenant->id . '_' . uniqid('', true) . '.' . $ext;
 
             file_put_contents($localPath, $bytes);
 
             return $localPath;
         } catch (\Throwable $e) {
-            // Don’t break PDF if logo fetch fails
-            \Log::warning('PDF logo fetch failed', [
+            Log::warning('PDF logo fetch failed: ' . $e->getMessage(), [
                 'tenant_id' => $tenant->id,
                 'disk' => $disk,
                 'path' => $tenant->logo_path,
-                'error' => $e->getMessage(),
             ]);
-
             return null;
         }
     }
 
     public function stream(Tenant $tenant, Quote $quote)
     {
+        // ✅ give DomPDF breathing room
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+
         $tenant = app('tenant');
         $this->authorize('view', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
@@ -73,9 +74,13 @@ class QuotePdfController extends Controller
 
         $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
+        Log::info('PDF stream start', ['quote_id' => $quote->id, 'tenant_id' => $tenant->id]);
+
         try {
-            return Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'))
-                ->stream($quote->quote_number . '.pdf');
+            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'));
+            Log::info('PDF stream rendered', ['quote_id' => $quote->id]);
+
+            return $pdf->stream($quote->quote_number . '.pdf');
         } finally {
             if ($pdfLogoPath && file_exists($pdfLogoPath)) {
                 @unlink($pdfLogoPath);
@@ -85,6 +90,9 @@ class QuotePdfController extends Controller
 
     public function download(Tenant $tenant, Quote $quote)
     {
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+
         $tenant = app('tenant');
         $this->authorize('view', $quote);
         abort_unless((int) $quote->tenant_id === (int) $tenant->id, 404);
@@ -103,9 +111,13 @@ class QuotePdfController extends Controller
 
         $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
+        Log::info('PDF download start', ['quote_id' => $quote->id, 'tenant_id' => $tenant->id]);
+
         try {
-            return Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'))
-                ->download($quote->quote_number . '.pdf');
+            $pdf = Pdf::loadView('tenant.quotes.pdf', compact('tenant', 'quote', 'pdfLogoPath'));
+            Log::info('PDF download rendered', ['quote_id' => $quote->id]);
+
+            return $pdf->download($quote->quote_number . '.pdf');
         } finally {
             if ($pdfLogoPath && file_exists($pdfLogoPath)) {
                 @unlink($pdfLogoPath);
@@ -113,5 +125,4 @@ class QuotePdfController extends Controller
         }
     }
 }
-
 
