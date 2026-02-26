@@ -1,9 +1,8 @@
 @props([
     'tenant',
-    // Optional: override size if you want
-    'logoHeight' => 56,
-    'logoMaxWidth' => 180,
-    // Optional: show address/meta
+    // Bigger by default
+    'logoHeight' => 72,
+    'logoMaxWidth' => 240,
     'showAddress' => true,
     'showMeta' => true,
 ])
@@ -11,7 +10,6 @@
 @php
     $hasLogo = !empty($tenant?->logo_path);
 
-    // Serve via controller route (works even if bucket is private)
     $logoSrc = $hasLogo
         ? tenant_route('tenant.branding.logo', ['tenant' => $tenant->subdomain ?? $tenant]) .
             '?v=' .
@@ -28,7 +26,7 @@
         ->implode(' • ');
 @endphp
 
-<div class="d-flex align-items-center gap-3">
+<div class="d-flex flex-column align-items-start gap-2">
     @if ($hasLogo)
         <img src="{{ $logoSrc }}" alt="Logo"
             style="height:{{ (int) $logoHeight }}px; width:auto; max-width:{{ (int) $logoMaxWidth }}px;"
@@ -46,7 +44,7 @@
         </div>
     @endif
 
-    <div>
+    <div class="text-start">
         <div class="fw-semibold" style="font-size: 18px;">{{ $tenant->name }}</div>
 
         @if ($showAddress && !empty($tenant->company_address))
