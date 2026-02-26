@@ -9,18 +9,69 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-
+use Illuminate\Support\Facades\Storage;
 
 class CompanyStatementController extends Controller
 {
+    protected function resolveLocalLogoPath($tenant): ?string
+    {
+        if (empty($tenant?->logo_path)) {
+            return null;
+        }
+
+        $disk = (string) config('filesystems.tenant_logo_disk', 'tenant_logos');
+
+        try {
+            $bytes = Storage::disk($disk)->get($tenant->logo_path);
+            if (!$bytes) return null;
+
+            // Guard against huge uploads killing DomPDF
+            if (strlen($bytes) > 2 * 1024 * 1024) { // 2MB
+                Log::warning('Statement PDF logo too large, skipping', [
+                    'tenant_id' => $tenant->id,
+                    'path' => $tenant->logo_path,
+                    'size' => strlen($bytes),
+                ]);
+                return null;
+            }
+
+            $tmpDir = storage_path('app/tmp');
+            if (!is_dir($tmpDir)) {
+                @mkdir($tmpDir, 0775, true);
+            }
+            if (!is_writable($tmpDir)) {
+                Log::warning('Statement PDF tmp dir not writable', ['tmp' => $tmpDir]);
+                return null;
+            }
+
+            $ext = pathinfo($tenant->logo_path, PATHINFO_EXTENSION) ?: 'png';
+            $localPath = $tmpDir . '/tenant_logo_' . $tenant->id . '_' . uniqid('', true) . '.' . $ext;
+
+            file_put_contents($localPath, $bytes);
+
+            return $localPath;
+        } catch (\Throwable $e) {
+            Log::warning('Statement PDF logo fetch failed: ' . $e->getMessage(), [
+                'tenant_id' => $tenant->id,
+                'disk' => $disk,
+                'path' => $tenant->logo_path,
+                'class' => get_class($e),
+                'prev' => $e->getPrevious()?->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
     public function show(Request $request, string $tenantKey, Company $company)
     {
         $tenant = app('tenant');
         $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
-        if (! $this->canStatement($tenant)) {
+        if (!$this->canStatement($tenant)) {
             return $this->denyStatement($company);
         }
 
@@ -34,26 +85,60 @@ class CompanyStatementController extends Controller
 
     public function pdf(Request $request, string $tenantKey, Company $company)
     {
+        @ini_set('memory_limit', '768M');
+        @set_time_limit(180);
+
         $tenant = app('tenant');
         $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
-        if (! $this->canStatement($tenant)) {
+        if (!$this->canStatement($tenant)) {
             return $this->denyStatement($company);
         }
 
         $data = $this->buildLedger($request, $tenant->id, $company->id);
-
-        // optional "To" address snapshot (billing preferred)
         $companyAddress = $this->companyToAddressSnapshot($tenant->id, $company);
 
-        $pdf = Pdf::loadView('tenant.companies.statement_pdf', array_merge($data, [
-            'tenant' => $tenant,
-            'company' => $company,
-            'companyAddress' => $companyAddress,
-        ]));
+        $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
-        return $pdf->stream("statement-{$company->id}.pdf");
+        try {
+            Log::info('Statement PDF render start', ['company_id' => $company->id, 'tenant_id' => $tenant->id]);
+
+            $pdf = Pdf::loadView('tenant.companies.statement_pdf', array_merge($data, [
+                'tenant' => $tenant,
+                'company' => $company,
+                'companyAddress' => $companyAddress,
+                'pdfLogoPath' => $pdfLogoPath,
+            ]))->setPaper('a4');
+
+            $bytes = $pdf->output();
+
+            Log::info('Statement PDF render done', [
+                'company_id' => $company->id,
+                'bytes' => strlen($bytes),
+                'logo_used' => (bool) $pdfLogoPath,
+            ]);
+
+            $filename = "statement-{$company->id}.pdf";
+
+            return response($bytes, 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $filename . '"',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Statement PDF render failed: ' . $e->getMessage(), [
+                'company_id' => $company->id,
+                'tenant_id' => $tenant->id,
+                'class' => get_class($e),
+                'prev' => $e->getPrevious()?->getMessage(),
+            ]);
+
+            abort(500, 'PDF generation failed.');
+        } finally {
+            if ($pdfLogoPath && file_exists($pdfLogoPath)) {
+                @unlink($pdfLogoPath);
+            }
+        }
     }
 
     public function csv(Request $request, string $tenantKey, Company $company)
@@ -62,7 +147,7 @@ class CompanyStatementController extends Controller
         $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
-        if (! $this->canStatement($tenant)) {
+        if (!$this->canStatement($tenant)) {
             return $this->denyStatement($company);
         }
 
@@ -76,7 +161,6 @@ class CompanyStatementController extends Controller
 
             fputcsv($out, ['Date', 'Type', 'Reference', 'Description', 'Debit', 'Credit', 'Balance']);
 
-            // opening row
             fputcsv($out, [
                 $data['from'],
                 'Opening Balance',
@@ -84,7 +168,7 @@ class CompanyStatementController extends Controller
                 '',
                 '',
                 '',
-                number_format((float)$data['opening'], 2, '.', ''),
+                number_format((float) $data['opening'], 2, '.', ''),
             ]);
 
             foreach ($ledger as $r) {
@@ -93,9 +177,9 @@ class CompanyStatementController extends Controller
                     $r->type,
                     $r->ref,
                     $r->description,
-                    number_format((float)$r->debit, 2, '.', ''),
-                    number_format((float)$r->credit, 2, '.', ''),
-                    number_format((float)$r->balance, 2, '.', ''),
+                    number_format((float) $r->debit, 2, '.', ''),
+                    number_format((float) $r->credit, 2, '.', ''),
+                    number_format((float) $r->balance, 2, '.', ''),
                 ]);
             }
 
@@ -105,43 +189,55 @@ class CompanyStatementController extends Controller
 
     public function email(Request $request, string $tenantKey, Company $company)
     {
+        @ini_set('memory_limit', '768M');
+        @set_time_limit(180);
+
         $tenant = app('tenant');
         $this->authorize('statement', Invoice::class);
         abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
-        // Email sending is Pro feature
-        if (! tenant_feature($tenant, 'invoice_email_send')) {
+        if (!tenant_feature($tenant, 'invoice_email_send')) {
             return back()->with('error', 'Email sending is not enabled for your plan.');
         }
 
-        // Also require statement/export permission
-        if (! $this->canStatement($tenant)) {
+        if (!$this->canStatement($tenant)) {
             return $this->denyStatement($company);
         }
 
         $toEmail = trim((string) $request->input('to')) ?: (string) ($company->email ?? '');
-        if (! $toEmail) {
+        if (!$toEmail) {
             return back()->with('error', 'No email address provided for this company.');
         }
 
         $data = $this->buildLedger($request, $tenant->id, $company->id);
         $companyAddress = $this->companyToAddressSnapshot($tenant->id, $company);
 
-        $pdf = Pdf::loadView('tenant.companies.statement_pdf', array_merge($data, [
-            'tenant' => $tenant,
-            'company' => $company,
-            'companyAddress' => $companyAddress,
-        ]));
+        $pdfLogoPath = $this->resolveLocalLogoPath($tenant);
 
-        Mail::to($toEmail)->send(new CompanyStatementMail(
-            $tenant,
-            $company,
-            Carbon::parse($data['from']),
-            Carbon::parse($data['to']),
-            $pdf->output()
-        ));
+        try {
+            $pdf = Pdf::loadView('tenant.companies.statement_pdf', array_merge($data, [
+                'tenant' => $tenant,
+                'company' => $company,
+                'companyAddress' => $companyAddress,
+                'pdfLogoPath' => $pdfLogoPath,
+            ]))->setPaper('a4');
 
-        return back()->with('success', 'Statement emailed successfully.');
+            $bytes = $pdf->output();
+
+            Mail::to($toEmail)->send(new CompanyStatementMail(
+                $tenant,
+                $company,
+                Carbon::parse($data['from']),
+                Carbon::parse($data['to']),
+                $bytes
+            ));
+
+            return back()->with('success', 'Statement emailed successfully.');
+        } finally {
+            if ($pdfLogoPath && file_exists($pdfLogoPath)) {
+                @unlink($pdfLogoPath);
+            }
+        }
     }
 
     /**
@@ -152,9 +248,6 @@ class CompanyStatementController extends Controller
         [$from, $to] = $this->resolveRange($request);
         $range = $request->get('range', 'this_month');
 
-        // -----------------------------
-        // Base subqueries (financial docs only)
-        // -----------------------------
         $invBase = DB::table('invoices')
             ->selectRaw("
                 issued_at as date,
@@ -207,9 +300,6 @@ class CompanyStatementController extends Controller
             ->where('tenant_id', $tenantId)
             ->where('company_id', $companyId);
 
-        // -----------------------------
-        // Opening balance: everything BEFORE from-date
-        // -----------------------------
         $openingRows = (clone $invBase)->whereDate('issued_at', '<', $from)
             ->unionAll((clone $payBase)->whereDate('paid_at', '<', $from))
             ->unionAll((clone $cnBase)->whereDate('issued_at', '<', $from))
@@ -220,9 +310,6 @@ class CompanyStatementController extends Controller
             ->selectRaw('COALESCE(SUM(debit),0) - COALESCE(SUM(credit),0) as balance')
             ->value('balance') ?? 0);
 
-        // -----------------------------
-        // Ledger rows within range
-        // -----------------------------
         $rows = (clone $invBase)->whereDate('issued_at', '>=', $from)->whereDate('issued_at', '<=', $to)
             ->unionAll((clone $payBase)->whereDate('paid_at', '>=', $from)->whereDate('paid_at', '<=', $to))
             ->unionAll((clone $cnBase)->whereDate('issued_at', '>=', $from)->whereDate('issued_at', '<=', $to))
@@ -230,12 +317,11 @@ class CompanyStatementController extends Controller
 
         $ledger = DB::query()
             ->fromSub($rows, 'x')
-            ->whereNotNull('date') // defensive
+            ->whereNotNull('date')
             ->orderBy('date')
             ->orderBy('created_at')
             ->get();
 
-        // Running balance
         $running = $opening;
         $ledger = $ledger->map(function ($r) use (&$running) {
             $running += ((float) $r->debit) - ((float) $r->credit);
@@ -248,14 +334,14 @@ class CompanyStatementController extends Controller
         $closing      = (float) $running;
 
         return [
-            'ledger'       => $ledger,
-            'from'         => $from,
-            'to'           => $to,
-            'opening'      => $opening,
-            'periodDebit'  => $periodDebit,
+            'ledger' => $ledger,
+            'from' => $from,
+            'to' => $to,
+            'opening' => $opening,
+            'periodDebit' => $periodDebit,
             'periodCredit' => $periodCredit,
-            'closing'      => $closing,
-            'range'        => $range,
+            'closing' => $closing,
+            'range' => $range,
         ];
     }
 
@@ -329,9 +415,6 @@ class CompanyStatementController extends Controller
         return [$from->toDateString(), $to->toDateString()];
     }
 
-    // -------------------------------------------------------------------------
-    // Feature gates (unchanged)
-    // -------------------------------------------------------------------------
     private function canStatement($tenant): bool
     {
         return tenant_feature($tenant, 'statement') || tenant_feature($tenant, 'export');
@@ -344,13 +427,8 @@ class CompanyStatementController extends Controller
             ->with('error', 'Statements are not enabled for your plan.');
     }
 
-    // -------------------------------------------------------------------------
-    // Company "To" address snapshot for PDF
-    // -------------------------------------------------------------------------
     private function companyToAddressSnapshot(int $tenantId, Company $company): string
     {
-        // Prefer billing default; fallback shipping; fallback blank.
-        // Works with your addresses relation already used elsewhere.
         try {
             $company->loadMissing(['addresses.country', 'addresses.subdivision']);
             $billing = $company->addresses
@@ -372,6 +450,3 @@ class CompanyStatementController extends Controller
         }
     }
 }
-
-
-

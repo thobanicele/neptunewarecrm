@@ -193,17 +193,12 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
             <td valign="top" width="60%">
                 <table>
                     <tr>
-                        <td valign="top" style="padding-right:10px;">
-                            @if (!empty($tenant->logo_path))
-                                {{-- dompdf: use public_path() for local file --}}
-                                <img src="{{ public_path('storage/' . $tenant->logo_path) }}"
-                                    style="height:60px; width:60px;" alt="Logo">
-                            @else
-                                <div
-                                    style="height:60px; width:60px; border:1px solid rgba(0,0,0,.12); text-align:center; line-height:60px;">
-                                    {{ strtoupper(substr($tenant->name, 0, 1)) }}
-                                </div>
-                            @endif
+                        <td style="width:60%; padding-top:10px;">
+                            @include('tenant.partials.pdf-transaction-header-brand', [
+                                'tenant' => $tenant,
+                                'logoHeight' => 70,
+                                'pdfLogoPath' => $pdfLogoPath ?? null,
+                            ])
                         </td>
                         <td valign="top">
                             <div style="font-size:16px; font-weight:800;">{{ $tenant->name }}</div>

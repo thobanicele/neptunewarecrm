@@ -150,14 +150,17 @@ $tenantAddress = $tenant->address ?? '';
 
     <div class="row">
         <div class="col left">
-            @if (!empty($tenant->logo_path))
-                <img class="logo" src="{{ public_path('storage/' . $tenant->logo_path) }}" alt="Logo">
-            @else
-                <div class="h2">{{ $tenant->name }}</div>
-            @endif
+            @include('tenant.partials.pdf-transaction-header-brand', [
+                'tenant' => $tenant,
+                'logoHeight' => 70,
+                'pdfLogoPath' => $pdfLogoPath ?? null,
+            ])
         </div>
+
         <div class="col right">
             <div style="font-weight:700;">{{ $tenant->name }}</div>
+
+            @php $tenantAddress = $tenant->address ?? ''; @endphp
             @if (!empty($tenantAddress))
                 <div class="muted" style="white-space:pre-wrap;">{{ $tenantAddress }}</div>
             @endif

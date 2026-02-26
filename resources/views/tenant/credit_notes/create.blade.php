@@ -31,22 +31,14 @@
 
                     <div class="row g-3 align-items-start">
                         <div class="col-12 col-lg-6">
-                            <div class="d-flex align-items-center gap-3">
-                                @if ($tenant->logo_path)
-                                    <img src="{{ Storage::disk(config('filesystems.tenant_logo_disk','tenant_logos'))->url($tenant->logo_path) }}" alt="Logo">
-                                @else
-                                    <div class="rounded bg-light border d-flex align-items-center justify-content-center"
-                                        style="height:56px; width:56px;">
-                                        <span
-                                            class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
-                                    </div>
-                                @endif
-
-                                <div>
-                                    <div class="fw-semibold" style="font-size: 18px;">{{ $tenant->name }}</div>
-                                    <div class="text-muted small">Credit Note</div>
-                                </div>
-                            </div>
+                            @include('tenant.partials.transaction-header-brand', [
+                                'tenant' => $tenant,
+                                // optional overrides:
+                                'logoHeight' => 56,
+                                'logoMaxWidth' => 180,
+                                'showAddress' => true,
+                                'showMeta' => true,
+                            ])
                         </div>
 
                         <div class="col-12 col-lg-6">

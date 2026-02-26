@@ -31,19 +31,17 @@
 
                     {{-- Header row: Logo + quote meta --}}
                     <div class="row g-3 align-items-start">
-                        <div class="col-12 col-lg-6">
-                            <div class="col-12 col-lg-6">
-                                @include('tenant.partials.transaction-header-brand', [
-                                    'tenant' => $tenant,
-                                    // optional overrides:
-                                    'logoHeight' => 56,
-                                    'logoMaxWidth' => 180,
-                                    'showAddress' => true,
-                                    'showMeta' => true,
-                                ])
-                            </div>
-                        </div>
 
+                        <div class="col-12 col-lg-6">
+                            @include('tenant.partials.transaction-header-brand', [
+                                'tenant' => $tenant,
+                                // optional overrides:
+                                'logoHeight' => 56,
+                                'logoMaxWidth' => 180,
+                                'showAddress' => true,
+                                'showMeta' => true,
+                            ])
+                        </div>
                         <div class="col-12 col-lg-6">
                             <div class="border rounded p-3">
                                 <div class="row g-2">

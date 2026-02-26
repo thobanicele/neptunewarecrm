@@ -309,27 +309,13 @@
 
             <div class="nw-header">
                 <div class="nw-brand">
-                    @if (!empty($tenant->logo_path))
-                        <img class="nw-logo" src="{{ asset('storage/' . $tenant->logo_path) }}" alt="Logo">
-                    @else
-                        <div class="rounded bg-light border d-flex align-items-center justify-content-center"
-                            style="height:64px; width:64px;">
-                            <span class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
-                        </div>
-                    @endif
-
-                    <div>
-                        <div class="fw-bold" style="font-size:18px;">{{ $tenant->name }}</div>
-                        <div class="nw-muted small">Workspace: {{ $tenant->subdomain }}</div>
-
-                        @if (!empty($tenant->address))
-                            <div class="nw-muted small nw-pre" style="margin-top:8px;">{{ $tenant->address }}</div>
-                        @endif
-
-                        @if (!empty($tenant->vat_number))
-                            <div class="nw-muted small" style="margin-top:6px;">VAT Number: {{ $tenant->vat_number }}</div>
-                        @endif
-                    </div>
+                    @include('tenant.partials.transaction-header-brand', [
+                        'tenant' => $tenant,
+                        'logoHeight' => 72,
+                        'logoMaxWidth' => 260,
+                        'showAddress' => true,
+                        'showMeta' => true,
+                    ])
                 </div>
 
                 <div class="nw-title">

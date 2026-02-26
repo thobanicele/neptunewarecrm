@@ -183,21 +183,11 @@
     <table>
         <tr>
             <td style="width:60%; padding-top:10px;">
-                @if ($hasLogo)
-                    <img src="{{ $logoPath }}" alt="Logo" style="height:60px;">
-                @else
-                    <div class="h2">{{ $tenant->name }}</div>
-                @endif
-
-                <div class="mt-6" style="font-weight:700;">{{ $tenant->name }}</div>
-
-                @if ($tenantAddress)
-                    <div class="small muted pre mt-6">{{ $tenantAddress }}</div>
-                @endif
-
-                @if ($tenantVatNo)
-                    <div class="small muted mt-6">VAT Number: {{ $tenantVatNo }}</div>
-                @endif
+                @include('tenant.partials.pdf-transaction-header-brand', [
+                    'tenant' => $tenant,
+                    'logoHeight' => 70,
+                    'pdfLogoPath' => $pdfLogoPath ?? null,
+                ])
             </td>
 
             <td style="width:40%;" class="right">

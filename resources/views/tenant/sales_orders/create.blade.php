@@ -32,277 +32,274 @@
                     {{-- Header row: Logo + sales order meta --}}
                     <div class="row g-3 align-items-start">
                         <div class="col-12 col-lg-6">
-                            <div class="d-flex align-items-center gap-3">
-                                @if ($tenant->logo_path)
-                                    <img src="{{ Storage::disk(config('filesystems.tenant_logo_disk', 'tenant_logos'))->url($tenant->logo_path) }}"
-                                        alt="Logo">
-                                @else
-                                    <div class="rounded bg-light border d-flex align-items-center justify-content-center"
-                                        style="height:56px; width:56px;">
-                                        <span
-                                            class="text-muted fw-semibold">{{ strtoupper(substr($tenant->name, 0, 1)) }}</span>
-                                    </div>
-                                @endif
+                            <div class="col-12 col-lg-6">
+                                <div class="col-12 col-lg-6">
+                                    @include('tenant.partials.transaction-header-brand', [
+                                        'tenant' => $tenant,
+                                        // optional overrides:
+                                        'logoHeight' => 56,
+                                        'logoMaxWidth' => 180,
+                                        'showAddress' => true,
+                                        'showMeta' => true,
+                                    ])
+                                </div>
+                            </div>
 
-                                <div>
-                                    <div class="fw-semibold" style="font-size: 18px;">{{ $tenant->name }}</div>
-                                    <div class="text-muted small">Sales Order</div>
+                            <div class="col-12 col-lg-6">
+                                <div class="border rounded p-3">
+                                    <div class="row g-2">
+
+                                        <div class="col-6">
+                                            <div class="text-muted small">Issued Date</div>
+                                            <input type="date" class="form-control" name="issued_at"
+                                                value="{{ old('issued_at', now()->toDateString()) }}">
+                                        </div>
+
+                                        <div class="col-6">
+                                            <div class="text-muted small">Currency</div>
+                                            <input type="text" class="form-control" name="currency" maxlength="10"
+                                                value="{{ old('currency', 'ZAR') }}">
+                                        </div>
+
+                                        <div class="col-6">
+                                            <div class="text-muted small">Status</div>
+                                            <select class="form-select" disabled>
+                                                <option selected>DRAFT</option>
+                                            </select>
+                                            <div class="form-text">New Sales Orders start as Draft.</div>
+                                        </div>
+
+                                        <div class="col-6">
+                                            <div class="text-muted small">Salesperson</div>
+                                            <select class="form-select @error('sales_person_user_id') is-invalid @enderror"
+                                                name="sales_person_user_id" required>
+                                                @foreach ($salesPeople ?? collect() as $u)
+                                                    <option value="{{ data_get($u, 'id') }}" @selected((string) old('sales_person_user_id', auth()->id()) === (string) data_get($u, 'id'))>
+                                                        {{ data_get($u, 'name') }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            @error('sales_person_user_id')
+                                                <div class="invalid-feedback">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="text-muted small">Associate Deal (optional)</div>
+                                            <select class="form-select" name="deal_id" id="dealSelect">
+                                                <option value="">— none —</option>
+                                                @foreach ($deals ?? collect() as $d)
+                                                    <option value="{{ data_get($d, 'id') }}" @selected((string) old('deal_id') === (string) data_get($d, 'id'))>
+                                                        #{{ data_get($d, 'id') }} • {{ data_get($d, 'title') }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <div class="text-muted small">Reference #</div>
+                                            <input type="text" class="form-control" name="reference" maxlength="120"
+                                                value="{{ old('reference') }}"
+                                                placeholder="e.g. SO-REF / PO / Internal Ref">
+                                        </div>
+
+                                    </div>
+                                </div>
+                                <div class="form-text">Owner is who creates it; Salesperson gets credit.</div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3">
+
+                        {{-- Customer select --}}
+                        <div class="row g-3">
+                            <div class="col-12 col-lg-8">
+                                <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                                <select class="form-select @error('company_id') is-invalid @enderror" name="company_id"
+                                    id="companySelect"
+                                    data-contacts-url-template="{{ tenant_route('tenant.companies.contacts.index', ['company' => '__ID__']) }}"
+                                    data-prefill-contact-id="{{ (string) old('contact_id', $prefillContactId ?? '') }}"
+                                    data-prefill-company-id="{{ (string) old('company_id', $prefillCompanyId ?? '') }}"
+                                    required>
+                                    <option value="">— select company —</option>
+                                    @foreach ($companies ?? collect() as $c)
+                                        <option value="{{ data_get($c, 'id') }}" @selected((string) old('company_id', $prefillCompanyId ?? null) === (string) data_get($c, 'id'))>
+                                            {{ data_get($c, 'name') }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('company_id')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                @enderror
+                                <div class="form-text">Company details show below after selecting.</div>
+                            </div>
+
+                            <div class="col-12 col-lg-4">
+                                <label class="form-label">Contact (optional)</label>
+                                <select class="form-select" name="contact_id" id="contactSelect">
+                                    <option value="">— none —</option>
+                                    {{-- loaded via AJAX based on company --}}
+                                </select>
+                            </div>
+                        </div>
+
+                        {{-- Bill To / Ship To --}}
+                        <div class="row g-3 mt-2">
+                            <div class="col-12 col-lg-6">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div class="text-muted small fw-semibold">BILL TO (BILLING)</div>
+                                    <div class="text-muted small" id="vatTreatmentLine"></div>
+                                </div>
+                                <div class="border rounded p-3" id="billingBox">
+                                    <div class="text-muted small">Select a company to view billing address.</div>
+                                </div>
+
+                                <div class="mt-2">
+                                    <div class="text-muted small">Payment Terms</div>
+                                    <div class="fw-semibold" id="paymentTermsLine">—</div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-lg-6">
+                                <div class="text-muted small fw-semibold mb-1">SHIP TO (DELIVERY)</div>
+                                <div class="border rounded p-3" id="shippingBox">
+                                    <div class="text-muted small">Select a company to view shipping address.</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-12 col-lg-6">
-                            <div class="border rounded p-3">
-                                <div class="row g-2">
+                        <hr class="my-3">
 
-                                    <div class="col-6">
-                                        <div class="text-muted small">Issued Date</div>
-                                        <input type="date" class="form-control" name="issued_at"
-                                            value="{{ old('issued_at', now()->toDateString()) }}">
-                                    </div>
-
-                                    <div class="col-6">
-                                        <div class="text-muted small">Currency</div>
-                                        <input type="text" class="form-control" name="currency" maxlength="10"
-                                            value="{{ old('currency', 'ZAR') }}">
-                                    </div>
-
-                                    <div class="col-6">
-                                        <div class="text-muted small">Status</div>
-                                        <select class="form-select" disabled>
-                                            <option selected>DRAFT</option>
-                                        </select>
-                                        <div class="form-text">New Sales Orders start as Draft.</div>
-                                    </div>
-
-                                    <div class="col-6">
-                                        <div class="text-muted small">Salesperson</div>
-                                        <select class="form-select @error('sales_person_user_id') is-invalid @enderror"
-                                            name="sales_person_user_id" required>
-                                            @foreach ($salesPeople ?? collect() as $u)
-                                                <option value="{{ data_get($u, 'id') }}" @selected((string) old('sales_person_user_id', auth()->id()) === (string) data_get($u, 'id'))>
-                                                    {{ data_get($u, 'name') }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        @error('sales_person_user_id')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-
-                                    <div class="col-12">
-                                        <div class="text-muted small">Associate Deal (optional)</div>
-                                        <select class="form-select" name="deal_id" id="dealSelect">
-                                            <option value="">— none —</option>
-                                            @foreach ($deals ?? collect() as $d)
-                                                <option value="{{ data_get($d, 'id') }}" @selected((string) old('deal_id') === (string) data_get($d, 'id'))>
-                                                    #{{ data_get($d, 'id') }} • {{ data_get($d, 'title') }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-
-                                    <div class="col-12">
-                                        <div class="text-muted small">Reference #</div>
-                                        <input type="text" class="form-control" name="reference" maxlength="120"
-                                            value="{{ old('reference') }}" placeholder="e.g. SO-REF / PO / Internal Ref">
-                                    </div>
-
-                                </div>
+                        {{-- Default VAT (for new rows) --}}
+                        <div class="row g-3">
+                            <div class="col-12 col-lg-4">
+                                <label class="form-label">Default VAT</label>
+                                <select class="form-select" name="tax_type_id" id="defaultTaxType">
+                                    @foreach ($taxTypes ?? collect() as $t)
+                                        <option value="{{ data_get($t, 'id') }}" @selected((string) old('tax_type_id', $defaultTaxTypeId ?? null) === (string) data_get($t, 'id'))>
+                                            {{ data_get($t, 'name') }}
+                                            ({{ number_format((float) data_get($t, 'rate', 0), 2) }}%)
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text">New rows will use this VAT by default.</div>
                             </div>
-                            <div class="form-text">Owner is who creates it; Salesperson gets credit.</div>
                         </div>
+
                     </div>
-
-                    <hr class="my-3">
-
-                    {{-- Customer select --}}
-                    <div class="row g-3">
-                        <div class="col-12 col-lg-8">
-                            <label class="form-label">Customer Name <span class="text-danger">*</span></label>
-                            <select class="form-select @error('company_id') is-invalid @enderror" name="company_id"
-                                id="companySelect"
-                                data-contacts-url-template="{{ tenant_route('tenant.companies.contacts.index', ['company' => '__ID__']) }}"
-                                data-prefill-contact-id="{{ (string) old('contact_id', $prefillContactId ?? '') }}"
-                                data-prefill-company-id="{{ (string) old('company_id', $prefillCompanyId ?? '') }}"
-                                required>
-                                <option value="">— select company —</option>
-                                @foreach ($companies ?? collect() as $c)
-                                    <option value="{{ data_get($c, 'id') }}" @selected((string) old('company_id', $prefillCompanyId ?? null) === (string) data_get($c, 'id'))>
-                                        {{ data_get($c, 'name') }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('company_id')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
-                            <div class="form-text">Company details show below after selecting.</div>
-                        </div>
-
-                        <div class="col-12 col-lg-4">
-                            <label class="form-label">Contact (optional)</label>
-                            <select class="form-select" name="contact_id" id="contactSelect">
-                                <option value="">— none —</option>
-                                {{-- loaded via AJAX based on company --}}
-                            </select>
-                        </div>
-                    </div>
-
-                    {{-- Bill To / Ship To --}}
-                    <div class="row g-3 mt-2">
-                        <div class="col-12 col-lg-6">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <div class="text-muted small fw-semibold">BILL TO (BILLING)</div>
-                                <div class="text-muted small" id="vatTreatmentLine"></div>
-                            </div>
-                            <div class="border rounded p-3" id="billingBox">
-                                <div class="text-muted small">Select a company to view billing address.</div>
-                            </div>
-
-                            <div class="mt-2">
-                                <div class="text-muted small">Payment Terms</div>
-                                <div class="fw-semibold" id="paymentTermsLine">—</div>
-                            </div>
-                        </div>
-
-                        <div class="col-12 col-lg-6">
-                            <div class="text-muted small fw-semibold mb-1">SHIP TO (DELIVERY)</div>
-                            <div class="border rounded p-3" id="shippingBox">
-                                <div class="text-muted small">Select a company to view shipping address.</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr class="my-3">
-
-                    {{-- Default VAT (for new rows) --}}
-                    <div class="row g-3">
-                        <div class="col-12 col-lg-4">
-                            <label class="form-label">Default VAT</label>
-                            <select class="form-select" name="tax_type_id" id="defaultTaxType">
-                                @foreach ($taxTypes ?? collect() as $t)
-                                    <option value="{{ data_get($t, 'id') }}" @selected((string) old('tax_type_id', $defaultTaxTypeId ?? null) === (string) data_get($t, 'id'))>
-                                        {{ data_get($t, 'name') }}
-                                        ({{ number_format((float) data_get($t, 'rate', 0), 2) }}%)
-                                    </option>
-                                @endforeach
-                            </select>
-                            <div class="form-text">New rows will use this VAT by default.</div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            {{-- ITEMS TABLE --}}
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div class="fw-semibold">Items</div>
-                    <div class="text-muted small">Type to search products. Description only shows after selection.</div>
                 </div>
 
-                <div class="card-body">
-
-                    <div class="table-responsive nw-overflow-visible">
-                        <table class="table align-middle table-sm nw-quote-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 42%;">ITEM</th>
-                                    <th style="width: 10%;">SKU</th>
-                                    <th style="width: 10%;">QTY</th>
-                                    <th style="width: 12%;">RATE</th>
-                                    <th style="width: 10%;">DISC %</th>
-                                    <th style="width: 14%;">VAT</th>
-                                    <th class="text-end nw-amount-col">LINE</th>
-                                    <th class="text-end nw-amount-col">INCL</th>
-                                    <th style="width: 2%;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="itemsBody"></tbody>
-                        </table>
-                    </div>
-
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="addItemBtn">+ Add New Row</button>
-
-                    <div class="row mt-4">
-                        <div class="col-12 col-lg-6">
-                            <label class="form-label">Customer Notes</label>
-                            <textarea class="form-control" name="notes" rows="4" placeholder="Will be displayed on the sales order">{{ old('notes') }}</textarea>
-
-                            <div class="mt-3">
-                                <label class="form-label">Terms</label>
-                                <textarea class="form-control" name="terms" rows="4">{{ old('terms') }}</textarea>
-                            </div>
-
-                            <div class="mt-4 border rounded p-3">
-                                <div class="fw-semibold mb-2">Signatures</div>
-                                <div class="row g-3">
-                                    <div class="col-12 col-md-6">
-                                        <div class="text-muted small">Prepared by</div>
-                                        <div class="border-bottom" style="height:24px;"></div>
-                                    </div>
-                                    <div class="col-12 col-md-6">
-                                        <div class="text-muted small">Approved by</div>
-                                        <div class="border-bottom" style="height:24px;"></div>
-                                    </div>
-                                    <div class="col-12 col-md-6">
-                                        <div class="text-muted small">Signature</div>
-                                        <div class="border-bottom" style="height:24px;"></div>
-                                    </div>
-                                    <div class="col-12 col-md-6">
-                                        <div class="text-muted small">Date</div>
-                                        <div class="border-bottom" style="height:24px;"></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <div class="col-12 col-lg-6 d-flex justify-content-end">
-                            <div class="border rounded p-4" style="min-width: 360px;">
-                                <div class="d-flex justify-content-between">
-                                    <div class="fw-semibold">Subtotal</div>
-                                    <div class="fw-semibold">R <span id="subtotal">0.00</span></div>
-                                </div>
-
-                                <div class="d-flex justify-content-between mt-2">
-                                    <div class="text-muted">Discount</div>
-                                    <div class="fw-semibold">- R <span id="discountTotal">0.00</span></div>
-                                </div>
-
-                                <div class="d-flex justify-content-between mt-2">
-                                    <div class="text-muted">VAT Total</div>
-                                    <div class="fw-semibold">R <span id="taxAmount">0.00</span></div>
-                                </div>
-
-                                <hr>
-
-                                <div class="d-flex justify-content-between">
-                                    <div class="fw-semibold">Grand Total</div>
-                                    <div class="fw-semibold">R <span id="grandTotal">0.00</span></div>
-                                </div>
-
-                                <div class="text-muted small mt-2">
-                                    Totals are calculated from Qty × Rate − Discount + VAT (per line).
-                                </div>
-
-                                @if (!empty($tenant->bank_details))
-                                    <hr class="my-3">
-                                    <div class="fw-semibold mb-1">Bank Details</div>
-                                    <div class="text-muted small" style="white-space: pre-wrap;">
-                                        {{ $tenant->bank_details }}</div>
-                                @endif
-                            </div>
+                {{-- ITEMS TABLE --}}
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">Items</div>
+                        <div class="text-muted small">Type to search products. Description only shows after selection.
                         </div>
                     </div>
 
-                    <div class="d-flex gap-2 mt-3">
-                        <button class="btn btn-primary" type="submit">Create Sales Order</button>
-                        <a class="btn btn-light" href="{{ tenant_route('tenant.sales-orders.index') }}">Cancel</a>
-                    </div>
+                    <div class="card-body">
 
+                        <div class="table-responsive nw-overflow-visible">
+                            <table class="table align-middle table-sm nw-quote-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 42%;">ITEM</th>
+                                        <th style="width: 10%;">SKU</th>
+                                        <th style="width: 10%;">QTY</th>
+                                        <th style="width: 12%;">RATE</th>
+                                        <th style="width: 10%;">DISC %</th>
+                                        <th style="width: 14%;">VAT</th>
+                                        <th class="text-end nw-amount-col">LINE</th>
+                                        <th class="text-end nw-amount-col">INCL</th>
+                                        <th style="width: 2%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="itemsBody"></tbody>
+                            </table>
+                        </div>
+
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="addItemBtn">+ Add New
+                            Row</button>
+
+                        <div class="row mt-4">
+                            <div class="col-12 col-lg-6">
+                                <label class="form-label">Customer Notes</label>
+                                <textarea class="form-control" name="notes" rows="4" placeholder="Will be displayed on the sales order">{{ old('notes') }}</textarea>
+
+                                <div class="mt-3">
+                                    <label class="form-label">Terms</label>
+                                    <textarea class="form-control" name="terms" rows="4">{{ old('terms') }}</textarea>
+                                </div>
+
+                                <div class="mt-4 border rounded p-3">
+                                    <div class="fw-semibold mb-2">Signatures</div>
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-6">
+                                            <div class="text-muted small">Prepared by</div>
+                                            <div class="border-bottom" style="height:24px;"></div>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <div class="text-muted small">Approved by</div>
+                                            <div class="border-bottom" style="height:24px;"></div>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <div class="text-muted small">Signature</div>
+                                            <div class="border-bottom" style="height:24px;"></div>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <div class="text-muted small">Date</div>
+                                            <div class="border-bottom" style="height:24px;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="col-12 col-lg-6 d-flex justify-content-end">
+                                <div class="border rounded p-4" style="min-width: 360px;">
+                                    <div class="d-flex justify-content-between">
+                                        <div class="fw-semibold">Subtotal</div>
+                                        <div class="fw-semibold">R <span id="subtotal">0.00</span></div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between mt-2">
+                                        <div class="text-muted">Discount</div>
+                                        <div class="fw-semibold">- R <span id="discountTotal">0.00</span></div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between mt-2">
+                                        <div class="text-muted">VAT Total</div>
+                                        <div class="fw-semibold">R <span id="taxAmount">0.00</span></div>
+                                    </div>
+
+                                    <hr>
+
+                                    <div class="d-flex justify-content-between">
+                                        <div class="fw-semibold">Grand Total</div>
+                                        <div class="fw-semibold">R <span id="grandTotal">0.00</span></div>
+                                    </div>
+
+                                    <div class="text-muted small mt-2">
+                                        Totals are calculated from Qty × Rate − Discount + VAT (per line).
+                                    </div>
+
+                                    @if (!empty($tenant->bank_details))
+                                        <hr class="my-3">
+                                        <div class="fw-semibold mb-1">Bank Details</div>
+                                        <div class="text-muted small" style="white-space: pre-wrap;">
+                                            {{ $tenant->bank_details }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2 mt-3">
+                            <button class="btn btn-primary" type="submit">Create Sales Order</button>
+                            <a class="btn btn-light" href="{{ tenant_route('tenant.sales-orders.index') }}">Cancel</a>
+                        </div>
+
+                    </div>
                 </div>
-            </div>
 
         </form>
     </div>
