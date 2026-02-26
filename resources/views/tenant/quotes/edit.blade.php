@@ -94,10 +94,10 @@ $companiesJsonLocal = ($companies ?? collect())
                                 @include('tenant.partials.transaction-header-brand', [
                                     'tenant' => $tenant,
                                     // optional overrides:
-                                    'logoHeight' => 56,
-                                    'logoMaxWidth' => 180,
-                                    'showAddress' => true,
-                                    'showMeta' => true,
+                                    // 'logoHeight' => 56,
+                                    // 'logoMaxWidth' => 180,
+                                    // 'showAddress' => true,
+                                    // 'showMeta' => true,
                                 ])
                             </div>
                         </div>
