@@ -14,7 +14,7 @@ return [
     'modules' => [
         'users'        => ['view', 'create', 'update', 'delete', 'manage'],
         'settings'     => ['manage'],
-        'leads'        => ['view', 'create', 'update', 'delete'],
+        'leads'        => ['view', 'create', 'update', 'delete','stage','qualify','export'],
         'deals'        => ['view', 'create', 'update', 'delete'],
         'contacts'     => ['view', 'create', 'update', 'delete'],
         'companies'    => ['view', 'create', 'update', 'delete'],

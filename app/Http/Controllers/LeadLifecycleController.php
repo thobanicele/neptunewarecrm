@@ -17,7 +17,9 @@ class LeadLifecycleController extends Controller
     public function updateStage(Request $request, Tenant $tenant, Contact $contact)
     {
         $tenant = app('tenant');
-        $this->authorize('leadsStage', Contact::class);
+
+        // ✅ pass the model instance
+        $this->authorize('leadsStage', $contact);
 
         abort_unless((int) $contact->tenant_id === (int) $tenant->id, 404);
         abort_unless($contact->lifecycle_stage === 'lead', 404);
@@ -34,7 +36,7 @@ class LeadLifecycleController extends Controller
     public function qualify(Request $request, Tenant $tenant, Contact $contact)
     {
         $tenant = app('tenant');
-        $this->authorize('leadsQualify', Contact::class);
+        $this->authorize('leadsQualify', $contact);
 
         abort_unless((int) $contact->tenant_id === (int) $tenant->id, 404);
         abort_unless($contact->lifecycle_stage === 'lead', 404);
