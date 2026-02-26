@@ -82,6 +82,7 @@ class TenantSettingsController extends Controller
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
                 Rule::unique('tenants', 'subdomain')->ignore($tenant->id),
             ],
+            // keep your current cap; we also resize anyway
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'remove_logo' => ['nullable', 'boolean'],
         ]);
@@ -89,7 +90,9 @@ class TenantSettingsController extends Controller
         $oldSubdomain = $tenant->subdomain;
         $disk = $this->tenantLogoDisk();
 
+        // -----------------------------
         // Remove logo
+        // -----------------------------
         if ($request->boolean('remove_logo')) {
             if ($tenant->logo_path) {
                 Storage::disk($disk)->delete($tenant->logo_path);
@@ -97,30 +100,55 @@ class TenantSettingsController extends Controller
             $tenant->logo_path = null;
         }
 
-        // Upload logo (stable filename)
-        // Upload logo (stable filename)
+        // -----------------------------
+        // Upload logo (resize to 512x512, convert to PNG, store as logo.png)
+        // -----------------------------
         if ($request->hasFile('logo')) {
+            // delete old
             if ($tenant->logo_path) {
                 Storage::disk($disk)->delete($tenant->logo_path);
             }
 
             $file = $request->file('logo');
-            $ext  = strtolower($file->getClientOriginalExtension() ?: 'png');
 
-            $path = "tenants/{$tenant->id}/branding/logo.{$ext}";
+            // Intervention Image v3 (GD driver)
+            $manager = new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver());
 
-            // Put with explicit public visibility (works better across S3/R2)
-            Storage::disk($disk)->putFileAs(
-                "tenants/{$tenant->id}/branding",
-                $file,
-                "logo.{$ext}",
-                ['visibility' => 'public']
+            // Read -> scale down -> convert to PNG (keeps transparency)
+            $png = $manager
+                ->read($file->getPathname())
+                ->scaleDown(512, 512)
+                ->toPng();
+
+            // Save to temp file first (safer for streaming/upload)
+            $tmpDir = storage_path('app/tmp');
+            if (!is_dir($tmpDir)) {
+                @mkdir($tmpDir, 0775, true);
+            }
+
+            $tmpPath = $tmpDir . '/logo_' . $tenant->id . '_' . uniqid('', true) . '.png';
+            $png->save($tmpPath);
+
+            // Store as stable filename
+            $path = "tenants/{$tenant->id}/branding/logo.png";
+
+            Storage::disk($disk)->put(
+                $path,
+                file_get_contents($tmpPath),
+                [
+                    'visibility' => 'public',
+                    'ContentType' => 'image/png',
+                ]
             );
+
+            @unlink($tmpPath);
 
             $tenant->logo_path = $path;
         }
 
+        // -----------------------------
         // Update fields
+        // -----------------------------
         $tenant->name = $data['name'];
         $tenant->subdomain = $data['subdomain'];
         $tenant->save();
