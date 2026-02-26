@@ -96,8 +96,8 @@ $companiesJsonLocal = ($companies ?? collect())
                                     // optional overrides:
                                     // 'logoHeight' => 56,
                                     // 'logoMaxWidth' => 180,
-                                    // 'showAddress' => true,
-                                    // 'showMeta' => true,
+                                    'showAddress' => true,
+                                    'showMeta' => true,
                                 ])
                             </div>
                         </div>
