@@ -5,6 +5,7 @@ namespace App\Services;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
+use Illuminate\Support\Facades\DB;
 
 class TenantBootstrapService
 {
