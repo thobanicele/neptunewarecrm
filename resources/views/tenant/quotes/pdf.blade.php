@@ -180,6 +180,7 @@
             <td style="width:60%; padding-top:10px;">
                 @include('tenant.partials.pdf-transaction-header-brand', [
                     'tenant' => $tenant,
+                    'pdfLogoPath' => $pdfLogoPath ?? null,
                     'logoHeight' => 70,
                 ])
             </td>
