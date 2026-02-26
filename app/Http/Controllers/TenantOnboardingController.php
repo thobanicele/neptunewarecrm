@@ -43,13 +43,16 @@ class TenantOnboardingController extends Controller
                 'status'    => 'active',
             ]);
 
-            // Ensure roles exist (idempotent)
+            // ✅ Ensure roles exist (idempotent)
             $bootstrap->seedRolesForTenant((int) $tenant->id);
+
+            // ✅ Seed default pipeline + stages (idempotent)
+            $bootstrap->seedDefaultPipelineForTenant((int) $tenant->id);
 
             // Attach user to tenant
             $user->forceFill([
-                'tenant_id'  => $tenant->id,
-                'is_active'  => true,
+                'tenant_id' => $tenant->id,
+                'is_active' => true,
             ])->save();
 
             // ✅ Set tenant owner (platform-level)
@@ -77,8 +80,6 @@ class TenantOnboardingController extends Controller
 
                 $tenant->forceFill(['plan' => 'premium'])->save();
             }
-
-            // ... keep your pipeline bootstrap logic as-is here ...
 
             return $tenant;
         });
