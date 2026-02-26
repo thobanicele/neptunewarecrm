@@ -53,9 +53,9 @@ class PipelineSeeder extends Seeder
                             ->update(['is_default' => 0, 'updated_at' => now()]);
                     }
 
-                    // Seed stages (idempotent by tenant_id + pipeline_id + name)
+                    // Seed pipeline_stages (idempotent by tenant_id + pipeline_id + name)
                     foreach ($stageTemplate as $s) {
-                        DB::table('stages')->updateOrInsert(
+                        DB::table('pipeline_stages')->updateOrInsert(
                             [
                                 'tenant_id' => $tenant->id,
                                 'pipeline_id' => $pipelineId,
@@ -72,7 +72,7 @@ class PipelineSeeder extends Seeder
                     }
 
                     // Optional: normalize stage positions (avoid duplicates/gaps)
-                    $stages = DB::table('stages')
+                    $pipeline_stages = DB::table('pipeline_stages')
                         ->where('tenant_id', $tenant->id)
                         ->where('pipeline_id', $pipelineId)
                         ->orderBy('position')
@@ -80,8 +80,8 @@ class PipelineSeeder extends Seeder
                         ->get(['id']);
 
                     $pos = 1;
-                    foreach ($stages as $row) {
-                        DB::table('stages')->where('id', $row->id)->update(['position' => $pos++]);
+                    foreach ($pipeline_stages as $row) {
+                        DB::table('pipeline_stages')->where('id', $row->id)->update(['position' => $pos++]);
                     }
                 });
             }
