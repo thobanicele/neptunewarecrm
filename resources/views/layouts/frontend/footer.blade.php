@@ -20,19 +20,19 @@
         <div class="col-12 col-md-6 text-center text-md-end mt-2 mt-md-0">
             <ul class="list-inline mb-0 small">
                 <li class="list-inline-item">
-                    <a class="text-muted nw-footer-link" href="https://crm.neptuneware.com/support" target="_blank"
+                    <a class="text-muted nw-footer-link" href="{{ route('support') }}" target="_blank"
                         rel="noopener">Support</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted nw-footer-link" href="https://crm.neptuneware.com/help-center" target="_blank"
+                    <a class="text-muted nw-footer-link" href="{{ route('help.center') }}" target="_blank"
                         rel="noopener">Help Center</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted nw-footer-link" href="https://crm.neptuneware.com/privacy-policy"
+                    <a class="text-muted nw-footer-link" href="{{ route('privacy') }}"
                         target="_blank" rel="noopener">Privacy</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted nw-footer-link" href="https://crm.neptuneware.com/terms-of-service"
+                    <a class="text-muted nw-footer-link" href="{{ route('terms') }}"
                         target="_blank" rel="noopener">Terms</a>
                 </li>
 

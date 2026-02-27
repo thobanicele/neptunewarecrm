@@ -5,7 +5,8 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <meta name="description" content="A modern, multi-tenant CRM built for teams that need leads, deals, quotes, invoices and payments in one place.">
+    <meta name="description"
+        content="A modern, multi-tenant CRM built for teams that need leads, deals, quotes, invoices and payments in one place.">
     <meta name="author" content="NeptuneWare Pty LTD">
     <meta name="keywords"
         content="A modern, multi-tenant CRM built for teams that need leads, deals, quotes, invoices and payments in one place.">
@@ -40,6 +41,10 @@
     </div>
 
     <script src="{{ asset('asset/js/app.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.2/feather.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => feather.replace());
+    </script>
     @stack('scripts')
     <script>
         window.addEventListener('scroll', function() {

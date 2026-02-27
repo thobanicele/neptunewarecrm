@@ -545,4 +545,19 @@ Route::middleware(['auth', 'role:super_admin'])->group(function () {
     })->name('admin.dashboard');
 });
 
+/*
+|--------------------------------------------------------------------------
+|Help Section Links
+|--------------------------------------------------------------------------
+*/
+// routes/web.php
+Route::get('/support', [HomeController::class, 'support'])->name('support');
+Route::post('/support', [HomeController::class, 'supportSend'])->name('support.send');
+
+Route::get('/help-center', [HomeController::class, 'help'])->name('help.center');
+Route::get('/privacy-policy', [HomeController::class, 'privacy'])->name('privacy');
+Route::get('/terms-of-service', [HomeController::class, 'terms'])->name('terms');
+Route::get('/support/thanks', [HomeController::class, 'supportThanks'])
+    ->name('support.thanks');
+
 require __DIR__ . '/auth.php';
