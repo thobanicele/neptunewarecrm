@@ -102,7 +102,7 @@
                             <div class="text-muted small mb-3">All plans are multi-tenant with tenant-scoped roles.</div>
                             <div class="d-flex flex-wrap gap-2">
                                 <span class="badge nw-badge-neutral">/t/{tenant}</span>
-                                <span class="badge nw-badge-neutral">Spatie Teams</span>
+                                <span class="badge nw-badge-neutral">Roles & Permissions</span>
                                 <span class="badge nw-badge-neutral">Quotes</span>
                                 <span class="badge nw-badge-neutral">Invoices</span>
                                 <span class="badge nw-badge-neutral">Payments</span>
@@ -133,6 +133,7 @@
 
                         $isFree = $key === 'free';
                         $isPopular = $key === 'premium';
+                        $isBusiness = $key === 'business';
 
                         $usersMax = data_get($p, 'users.max');
                         $dealsMax = data_get($p, 'deals.max');
@@ -144,9 +145,6 @@
                         $hasExport = (bool) data_get($features, 'export', false);
                         $hasStatements = (bool) data_get($features, 'statements', false);
 
-                        // Button / action link
-                        $ctaText = $isFree ? 'Start free' : "Choose {$label}";
-                        $ctaHrefGuest = route('register');
                         // Auth: if tenant exists -> upgrade page; else onboarding
                         $tenant = auth()->check() ? auth()->user()->tenant : null;
                         $ctaHrefAuth = $tenant
@@ -235,7 +233,7 @@
                                         (/t/{tenant})
                                     </li>
                                     <li class="d-flex gap-2 mb-2"><span class="text-success">✓</span> Tenant-scoped roles
-                                        (Spatie Teams)</li>
+                                    </li>
                                     <li class="d-flex gap-2 mb-2"><span class="text-success">✓</span> Leads, companies,
                                         contacts, deals</li>
                                     <li class="d-flex gap-2 mb-2"><span class="text-success">✓</span> Quotes & invoices
@@ -248,6 +246,7 @@
                                             class="{{ $hasExport ? 'text-success' : 'text-muted' }}">{{ $hasExport ? '✓' : '—' }}</span>
                                         <span class="{{ $hasExport ? '' : 'text-muted' }}">Exports (CSV/PDF)</span>
                                     </li>
+
                                     <li class="d-flex gap-2 mb-2">
                                         <span
                                             class="{{ $hasStatements ? 'text-success' : 'text-muted' }}">{{ $hasStatements ? '✓' : '—' }}</span>
@@ -267,18 +266,30 @@
 
                                 <div class="mt-auto">
                                     @guest
-                                        <a href="{{ $ctaHrefGuest }}"
-                                            class="btn {{ $isPopular ? 'btn-primary' : 'btn-outline-primary' }} w-100">
-                                            {{ $ctaText }}
-                                        </a>
+                                        @if ($isBusiness)
+                                            <button class="btn btn-outline-secondary w-100" disabled>Coming soon</button>
+                                            <div class="text-muted small text-center mt-2">Business upgrades will be available
+                                                soon</div>
+                                        @else
+                                            <a href="{{ route('register') }}"
+                                                class="btn {{ $isPopular ? 'btn-primary' : 'btn-outline-primary' }} w-100">
+                                                {{ $isFree ? 'Start free' : "Choose {$label}" }}
+                                            </a>
+                                        @endif
                                     @endguest
 
                                     @auth
-                                        <a href="{{ $ctaHrefAuth }}"
-                                            class="btn {{ $isPopular ? 'btn-primary' : ($isFree ? 'btn-outline-primary' : 'btn-outline-primary') }} w-100">
-                                            {{ $isFree ? 'Go to workspace' : 'Upgrade' }}
-                                        </a>
-                                        <div class="text-muted small text-center mt-2">Cancel anytime</div>
+                                        @if ($isBusiness)
+                                            <button class="btn btn-outline-secondary w-100" disabled>Coming soon</button>
+                                            <div class="text-muted small text-center mt-2">Business upgrades will be available
+                                                soon</div>
+                                        @else
+                                            <a href="{{ $ctaHrefAuth }}"
+                                                class="btn {{ $isPopular ? 'btn-primary' : 'btn-outline-primary' }} w-100">
+                                                {{ $isFree ? 'Go to workspace' : 'Upgrade' }}
+                                            </a>
+                                            <div class="text-muted small text-center mt-2">Cancel anytime</div>
+                                        @endif
                                     @endauth
                                 </div>
                             </div>
@@ -410,16 +421,13 @@
                                                     continue;
                                                 }
 
-                                                // normal boolean features
                                                 $enabled = (bool) data_get($p, "features.$fKey", false);
                                                 $display = $enabled ? '✓' : '—';
 
-                                                // special case: watermark flag is inverted logic
                                                 if ($fKey === 'invoice_pdf_watermark') {
-                                                    $val = data_get($p, "features.$fKey", true); // default true on free
-                                                    $removed = $val === false; // false = NO watermark
+                                                    $val = data_get($p, "features.$fKey", true);
+                                                    $removed = $val === false;
                                                     $enabled = $removed;
-
                                                     $display = $removed ? 'No watermark' : 'Watermarked';
                                                 }
                                             @endphp
@@ -444,7 +452,6 @@
                 </div>
             </div>
 
-
             {{-- FAQ --}}
             <div class="mt-5">
                 <div class="text-center mb-4">
@@ -465,7 +472,7 @@
                         <div class="card nw-card h-100">
                             <div class="card-body">
                                 <div class="fw-semibold mb-2">Is my data isolated per tenant?</div>
-                                <div class="text-muted">Yes. Tenant routes + Spatie Teams ensure workspace isolation.</div>
+                                <div class="text-muted">Yes. Tenant routes + Permissions ensure workspace isolation.</div>
                             </div>
                         </div>
                     </div>

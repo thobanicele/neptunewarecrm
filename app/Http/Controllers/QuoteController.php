@@ -8,8 +8,12 @@ use App\Models\QuoteSequence;
 use App\Models\Deal;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\ActivityLog;
+use App\Models\QuoteItem;
 use App\Models\User;
 use App\Models\Product;
+use App\Models\Brand;
+use App\Models\Category;
 use App\Models\TaxType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +80,16 @@ class QuoteController extends Controller
             default => $itemsQuery->orderBy($sort, $dir),
         };
 
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
         // Stable secondary sort
         $items = $itemsQuery
             ->orderByDesc('id')
@@ -125,6 +139,16 @@ class QuoteController extends Controller
             }
         }
 
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
         // Validate prefilled contact belongs to tenant (+ optionally company if column exists)
         if ($prefillContactId) {
             $ok = Contact::query()
@@ -153,7 +177,7 @@ class QuoteController extends Controller
         $products = Product::query()
             ->where('tenant_id', $tenant->id)
             ->orderBy('name')
-            ->get(['id', 'name', 'sku', 'description', 'unit_rate']);
+            ->get(['id', 'name', 'sku', 'description', 'unit_rate', 'unit']);
 
         $taxTypes = TaxType::query()
             ->where('tenant_id', $tenant->id)
@@ -195,7 +219,8 @@ class QuoteController extends Controller
                 'vat_number' => $c->vat_number,
                 'billing_address' => $billing?->toSnapshotString(),
                 'shipping_address' => $shipping?->toSnapshotString(),
-                'address' => $billing?->toSnapshotString() ?: $shipping?->toSnapshotString(),
+                'address' => $billing?->toSnapshotString() ?: $shipping?->toSnapshotString()
+                
             ];
         })->keyBy('id');
 
@@ -225,6 +250,8 @@ class QuoteController extends Controller
             'taxTypes',
             'defaultTaxTypeId',
             'products',
+            'brands',
+            'categories',
         ));
     }
 
@@ -250,21 +277,22 @@ class QuoteController extends Controller
             'company_id' => ['nullable', 'integer'],
             'contact_id' => ['nullable', 'integer'],
 
-            'issued_at'     => ['nullable', 'date'],
-            'valid_until'   => ['nullable', 'date'],
-            'notes'         => ['nullable', 'string'],
-            'terms'         => ['nullable', 'string'],
-            'status'        => ['nullable', 'in:draft,sent,accepted,declined,expired'],
+            'issued_at'   => ['nullable', 'date'],
+            'valid_until' => ['nullable', 'date'],
+            'notes'       => ['nullable', 'string'],
+            'terms'       => ['nullable', 'string'],
+            'status'      => ['nullable', 'in:draft,sent,accepted,declined,expired'],
 
             'customer_reference' => ['nullable', 'string', 'max:120'],
-
             'sales_person_user_id' => ['required', 'integer'],
 
             'tax_type_id' => ['nullable', 'integer'],
 
             'items' => ['required', 'array', 'min:1'],
+
             'items.*.product_id'  => ['nullable', 'integer'],
             'items.*.tax_type_id' => ['nullable', 'integer'],
+
             'items.*.sku'  => ['nullable', 'string', 'max:64'],
             'items.*.unit' => ['nullable', 'string', 'max:30'],
 
@@ -272,22 +300,32 @@ class QuoteController extends Controller
             'items.*.description' => ['nullable', 'string'],
             'items.*.qty'         => ['required', 'numeric', 'min:0.01'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
-
             'items.*.discount_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
-        // Tenant safety (header fields)
-        if (!empty($data['deal_id']))    Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
-        if (!empty($data['company_id'])) Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
-        if (!empty($data['contact_id'])) Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
+        // Tenant safety (header)
+        if (!empty($data['deal_id'])) {
+            Deal::where('tenant_id', $tenant->id)->findOrFail((int) $data['deal_id']);
+        }
+        if (!empty($data['company_id'])) {
+            Company::where('tenant_id', $tenant->id)->findOrFail((int) $data['company_id']);
+        }
+        if (!empty($data['contact_id'])) {
+            Contact::where('tenant_id', $tenant->id)->findOrFail((int) $data['contact_id']);
+        }
         User::where('tenant_id', $tenant->id)->findOrFail((int) $data['sales_person_user_id']);
 
         return DB::transaction(function () use ($tenant, $data) {
 
-            // Products
+            // -----------------------
+            // Products used by product_id
+            // -----------------------
             $productIds = collect($data['items'])
-                ->pluck('product_id')->filter()->unique()
-                ->map(fn ($id) => (int) $id)->values();
+                ->pluck('product_id')
+                ->filter()
+                ->unique()
+                ->map(fn ($id) => (int) $id)
+                ->values();
 
             $productsById = collect();
             if ($productIds->isNotEmpty()) {
@@ -297,10 +335,12 @@ class QuoteController extends Controller
                     ->get(['id', 'sku', 'unit', 'name', 'description', 'unit_rate'])
                     ->keyBy('id');
 
-                if ($productsById->count() !== $productIds->count()) abort(404);
+                abort_unless($productsById->count() === $productIds->count(), 404);
             }
 
-            // Tax types
+            // -----------------------
+            // Tax types (header + rows)
+            // -----------------------
             $defaultTaxTypeId = !empty($data['tax_type_id']) ? (int) $data['tax_type_id'] : null;
 
             $taxTypeIds = collect($data['items'])
@@ -320,19 +360,17 @@ class QuoteController extends Controller
                     ->get(['id', 'name', 'rate'])
                     ->keyBy('id');
 
-                if ($taxTypesById->count() !== $taxTypeIds->count()) abort(404);
+                abort_unless($taxTypesById->count() === $taxTypeIds->count(), 404);
             }
 
             $quoteNumber = $this->nextQuoteNumber($tenant->id);
 
             $snapshotItems = [];
-
-            $subtotalGross = 0.0; // BEFORE discount
-            $discountTotal = 0.0; // discount amounts
-            $taxTotal      = 0.0; // VAT on NET (after discount)
+            $subtotalGross = 0.0;
+            $discountTotal = 0.0;
+            $taxTotal      = 0.0;
 
             foreach (array_values($data['items']) as $pos => $i) {
-
                 $qty       = (float) $i['qty'];
                 $productId = !empty($i['product_id']) ? (int) $i['product_id'] : null;
                 $taxTypeId = !empty($i['tax_type_id']) ? (int) $i['tax_type_id'] : $defaultTaxTypeId;
@@ -347,9 +385,10 @@ class QuoteController extends Controller
                 $discountPct = isset($i['discount_pct']) ? (float) $i['discount_pct'] : 0.0;
                 $discountPct = max(0.0, min(100.0, $discountPct));
 
+                // If product selected (including created via modal), snap from product as source of truth
                 if ($productId) {
                     $p = $productsById->get($productId);
-                    if (!$p) abort(404);
+                    abort_unless($p, 404);
 
                     $sku  = $p->sku;
                     $unit = $p->unit;
@@ -368,11 +407,9 @@ class QuoteController extends Controller
 
                 $taxName = null;
                 $taxRate = 0.0;
-
                 if ($taxTypeId) {
                     $t = $taxTypesById->get($taxTypeId);
-                    if (!$t) abort(404);
-
+                    abort_unless($t, 404);
                     $taxName = $t->name;
                     $taxRate = (float) $t->rate;
                 }
@@ -397,7 +434,6 @@ class QuoteController extends Controller
                     'discount_pct'    => $discountPct,
                     'discount_amount' => $discAmt,
 
-                    // net (excl VAT)
                     'line_total'  => $netLine,
 
                     'tax_name'    => $taxName,
@@ -412,7 +448,6 @@ class QuoteController extends Controller
 
             $netSubtotal = round($subtotalGross - $discountTotal, 2);
             $total       = round($netSubtotal + $taxTotal, 2);
-
             $effectiveRate = $netSubtotal > 0 ? round(($taxTotal / $netSubtotal) * 100, 2) : 0;
 
             $quote = Quote::create([

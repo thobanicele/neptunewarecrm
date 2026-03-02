@@ -8,16 +8,16 @@
         <div class="col-6 text-end">
             <ul class="list-inline">
                 <li class="list-inline-item">
-                    <a class="text-muted" href="https://adminkit.io/" target="_blank">Support</a>
+                    <a class="text-muted" href="{{ route('support') }}" target="_blank">Support</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted" href="https://adminkit.io/" target="_blank">Help Center</a>
+                    <a class="text-muted" href="{{ route('help.center') }}" target="_blank">Help Center</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted" href="https://adminkit.io/" target="_blank">Privacy</a>
+                    <a class="text-muted" href="{{ route('privacy') }}" target="_blank">Privacy</a>
                 </li>
                 <li class="list-inline-item">
-                    <a class="text-muted" href="https://adminkit.io/" target="_blank">Terms</a>
+                    <a class="text-muted" href="{{ route('terms') }}" target="_blank">Terms</a>
                 </li>
             </ul>
         </div>

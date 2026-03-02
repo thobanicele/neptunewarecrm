@@ -249,9 +249,18 @@
                             @if ($isCurrent)
                                 <button class="btn btn-secondary w-100" disabled>You’re on this plan</button>
                             @else
-                                @if ($canBuy)
+                                {{-- ✅ Business: Coming Soon (no upgrade links) --}}
+                                @if ((string) $planKey === 'business')
                                     <div class="d-grid gap-2">
-                                        {{-- NOTE: add 'plan' field; controller must accept it --}}
+                                        <button class="btn btn-outline-secondary w-100" disabled>Coming soon</button>
+                                        <div class="text-muted small">
+                                            Business plan upgrades will be available soon.
+                                        </div>
+                                    </div>
+
+                                    {{-- ✅ Premium: allow upgrade --}}
+                                @elseif ((string) $planKey === 'premium')
+                                    <div class="d-grid gap-2">
                                         <form method="POST"
                                             action="{{ tenant_route('tenant.billing.paystack.initialize') }}">
                                             @csrf
@@ -272,6 +281,8 @@
                                             You’ll be redirected to Paystack to complete payment.
                                         </div>
                                     </div>
+
+                                    {{-- Other plans: not purchasable --}}
                                 @else
                                     <button class="btn btn-outline-secondary w-100" disabled>Not purchasable yet</button>
                                     <div class="text-muted small mt-2">
@@ -298,7 +309,7 @@
                             <li>You can cancel anytime; access continues until the end of the paid period.</li>
                         </ul>
 
-                        @if ($paystackConfigured)
+                        {{-- @if ($paystackConfigured)
                             <div class="text-muted small mt-3">
                                 <span class="badge bg-light text-dark border">Paystack plans configured</span>
                             </div>
@@ -308,7 +319,7 @@
                                 <span class="ms-2">Add plan codes in your env/config so recurring subscriptions
                                     work.</span>
                             </div>
-                        @endif
+                        @endif --}}
                     </div>
                 </div>
             </div>

@@ -94,62 +94,89 @@ class ProductController extends Controller
     }
 
     public function store(Request $request, \App\Models\Tenant $tenant)
-    {
-        $tenant = app('tenant');
-        $this->authorize('create', Product::class);
+{
+    $tenant = app('tenant');
+    $this->authorize('create', \App\Models\Product::class);
 
-        $data = $request->validate([
-            'sku' => [
-                'required', 'string', 'max:80',
-                Rule::unique('products', 'sku')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
-            ],
-            'name' => [
-                'required', 'string', 'max:190',
-                Rule::unique('products', 'name')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
-            ],
-            'brand_id' => ['nullable', 'integer'],
-            'category_id' => ['nullable', 'integer'],
-            'description' => ['nullable', 'string', 'max:255'],
-            'unit_rate' => ['required', 'numeric', 'min:0'],
-            'unit' => ['nullable', 'string', 'max:30'],
-            'currency' => ['nullable', 'string', 'max:10'],
-            'tax_type_id' => ['nullable', 'integer'],
-            'is_active' => ['nullable'], // checkbox
-        ]);
+    $data = $request->validate([
+        'sku' => [
+            'required', 'string', 'max:80',
+            \Illuminate\Validation\Rule::unique('products', 'sku')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+        ],
+        'name' => [
+            'required', 'string', 'max:190',
+            \Illuminate\Validation\Rule::unique('products', 'name')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+        ],
+        'brand_id' => ['nullable', 'integer'],
+        'category_id' => ['nullable', 'integer'],
+        'description' => ['nullable', 'string', 'max:255'],
+        'unit_rate' => ['required', 'numeric', 'min:0'],
+        'unit' => ['nullable', 'string', 'max:30'],
+        'currency' => ['nullable', 'string', 'max:10'],
+        'tax_type_id' => ['nullable', 'integer'],
+        'is_active' => ['nullable'],
+    ]);
 
-        // Tenant safety for tax_type_id
-        if (!empty($data['tax_type_id'])) {
-            TaxType::where('tenant_id', $tenant->id)->findOrFail((int) $data['tax_type_id']);
-        }
-
-        // ✅ Tenant safety for brand_id
-        if (!empty($data['brand_id'])) {
-            Brand::where('tenant_id', $tenant->id)->findOrFail((int) $data['brand_id']);
-        }
-
-        // ✅ Tenant safety for category_id
-        if (!empty($data['category_id'])) {
-            Category::where('tenant_id', $tenant->id)->findOrFail((int) $data['category_id']);
-        }
-
-        Product::create([
-            'tenant_id' => $tenant->id,
-            'brand_id' => $data['brand_id'] ?? null,
-            'category_id' => $data['category_id'] ?? null,
-            'sku' => strtoupper(trim($data['sku'])),
-            'name' => trim($data['name']),
-            'description' => $data['description'] ?? null,
-            'unit_rate' => (float) $data['unit_rate'],
-            'unit' => $data['unit'] ?? null,
-            'currency' => $data['currency'] ?? null,
-            'tax_type_id' => $data['tax_type_id'] ?? null,
-            'is_active' => $request->boolean('is_active'),
-        ]);
-
-        return redirect()
-            ->to(tenant_route('tenant.products.index'))
-            ->with('success', 'Product created.');
+    if (!empty($data['tax_type_id'])) {
+        \App\Models\TaxType::where('tenant_id', $tenant->id)->findOrFail((int) $data['tax_type_id']);
     }
+    if (!empty($data['brand_id'])) {
+        \App\Models\Brand::where('tenant_id', $tenant->id)->findOrFail((int) $data['brand_id']);
+    }
+    if (!empty($data['category_id'])) {
+        \App\Models\Category::where('tenant_id', $tenant->id)->findOrFail((int) $data['category_id']);
+    }
+
+    $product = \App\Models\Product::create([
+        'tenant_id' => $tenant->id,
+        'brand_id' => $data['brand_id'] ?? null,
+        'category_id' => $data['category_id'] ?? null,
+        'sku' => strtoupper(trim($data['sku'])),
+        'name' => trim($data['name']),
+        'description' => $data['description'] ?? null,
+        'unit_rate' => (float) $data['unit_rate'],
+        'unit' => $data['unit'] ?? null,
+        'currency' => $data['currency'] ?? null,
+        'tax_type_id' => $data['tax_type_id'] ?? null,
+        'is_active' => $request->boolean('is_active'),
+    ]);
+
+    // ✅ Super-robust "is this a fetch/ajax/json call?" detection
+    $wantsJson =
+        $request->expectsJson()
+        || $request->wantsJson()
+        || $request->ajax()
+        || $request->isJson()
+        || str_contains((string) $request->header('accept'), 'application/json')
+        || $request->header('X-Requested-With') === 'XMLHttpRequest';
+
+    if ($wantsJson) {
+        $payload = [
+            'id' => $product->id,
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'description' => $product->description,
+            'unit_rate' => (float) $product->unit_rate,
+            'unit' => $product->unit,
+            'currency' => $product->currency,
+            'tax_type_id' => $product->tax_type_id,
+            'brand_id' => $product->brand_id,
+            'category_id' => $product->category_id,
+            'stock_on_hand' => (int) ($product->stock_on_hand ?? 0),
+        ];
+
+        return response()->json([
+            'ok' => true,
+            'product' => $payload,
+            // ALSO return flat (some JS does created.id directly)
+            'data' => $payload,
+        ]);
+    }
+
+    return redirect()
+        ->to(tenant_route('tenant.products.index'))
+        ->with('success', 'Product created.');
+}
 
     public function show(\App\Models\Tenant $tenant, Product $product)
     {
