@@ -33,9 +33,8 @@ class CreditNoteController extends Controller
 
         // filters
         $company_id = (string) $request->query('company_id', '');
-        $state      = (string) $request->query('state', ''); // available|allocated|refunded|''
+        $state      = (string) $request->query('state', '');
 
-        // sorting
         $sort = (string) $request->query('sort', 'issued_at');
         $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
