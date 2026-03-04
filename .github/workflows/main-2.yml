@@ -1,0 +1,3 @@
+- name: Deploy to Laravel Cloud Workflow
+  run: |
+    curl -X POST "${{ secrets.LARAVEL_CLOUD_DEPLOY_HOOK }}"
