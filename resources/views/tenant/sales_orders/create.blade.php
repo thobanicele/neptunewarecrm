@@ -1,6 +1,41 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        // Seed items for create
+        $seedItems = old('items');
+        if (!$seedItems || count($seedItems) === 0) {
+            $seedItems = [
+                [
+                    'product_id' => null,
+                    'tax_type_id' => old('tax_type_id', $defaultTaxTypeId ?? null),
+                    'name' => '',
+                    'description' => '',
+                    'qty' => 1,
+                    'unit_price' => 0,
+                    'sku' => '',
+                    'discount_pct' => 0,
+                ],
+            ];
+        }
+
+        // Fallback companies JSON (if controller doesn't pass $companiesJson)
+$companiesJsonLocal = ($companies ?? collect())
+    ->map(function ($c) {
+        return [
+            'id' => data_get($c, 'id'),
+            'name' => data_get($c, 'name'),
+            'payment_terms' => data_get($c, 'payment_terms'),
+            'vat_treatment' => data_get($c, 'vat_treatment'),
+            'vat_number' => data_get($c, 'vat_number'),
+            'billing_address' => data_get($c, 'billing_address'),
+            'shipping_address' => data_get($c, 'shipping_address'),
+            'address' => data_get($c, 'address'),
+        ];
+    })
+    ->keyBy('id');
+    @endphp
+
     <div class="container-fluid py-4">
 
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -25,289 +60,283 @@
         <form method="POST" action="{{ tenant_route('tenant.sales-orders.store') }}">
             @csrf
 
-            {{-- TOP: Proposal Header + Customer Details --}}
+            {{-- TOP: Header + Customer --}}
             <div class="card mb-3">
                 <div class="card-body">
 
-                    {{-- Header row: Logo + sales order meta --}}
                     <div class="row g-3 align-items-start">
                         <div class="col-12 col-lg-6">
-                            <div class="col-12 col-lg-6">
-                                <div class="col-12 col-lg-6">
-                                    @include('tenant.partials.transaction-header-brand', [
-                                        'tenant' => $tenant,
-                                        // optional overrides:
-                                        'logoHeight' => 56,
-                                        'logoMaxWidth' => 180,
-                                        'showAddress' => true,
-                                        'showMeta' => true,
-                                    ])
-                                </div>
-                            </div>
+                            @include('tenant.partials.transaction-header-brand', [
+                                'tenant' => $tenant,
+                                'logoHeight' => 56,
+                                'logoMaxWidth' => 180,
+                                'showAddress' => true,
+                                'showMeta' => true,
+                            ])
+                        </div>
 
-                            <div class="col-12 col-lg-6">
-                                <div class="border rounded p-3">
-                                    <div class="row g-2">
+                        <div class="col-12 col-lg-6">
+                            <div class="border rounded p-3">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="text-muted small">Issued Date</div>
+                                        <input type="date" class="form-control" name="issued_at"
+                                            value="{{ old('issued_at', now()->toDateString()) }}">
+                                    </div>
 
-                                        <div class="col-6">
-                                            <div class="text-muted small">Issued Date</div>
-                                            <input type="date" class="form-control" name="issued_at"
-                                                value="{{ old('issued_at', now()->toDateString()) }}">
-                                        </div>
+                                    <div class="col-6">
+                                        <div class="text-muted small">Currency</div>
+                                        <input type="text" class="form-control" name="currency" maxlength="10"
+                                            value="{{ old('currency', 'ZAR') }}">
+                                    </div>
 
-                                        <div class="col-6">
-                                            <div class="text-muted small">Currency</div>
-                                            <input type="text" class="form-control" name="currency" maxlength="10"
-                                                value="{{ old('currency', 'ZAR') }}">
-                                        </div>
+                                    <div class="col-6">
+                                        <div class="text-muted small">Status</div>
+                                        <select class="form-select" disabled>
+                                            <option selected>DRAFT</option>
+                                        </select>
+                                        <div class="form-text">New Sales Orders start as Draft.</div>
+                                    </div>
 
-                                        <div class="col-6">
-                                            <div class="text-muted small">Status</div>
-                                            <select class="form-select" disabled>
-                                                <option selected>DRAFT</option>
-                                            </select>
-                                            <div class="form-text">New Sales Orders start as Draft.</div>
-                                        </div>
+                                    <div class="col-6">
+                                        <div class="text-muted small">Salesperson</div>
+                                        <select class="form-select @error('sales_person_user_id') is-invalid @enderror"
+                                            name="sales_person_user_id" required>
+                                            @foreach ($salesPeople ?? collect() as $u)
+                                                <option value="{{ data_get($u, 'id') }}" @selected((string) old('sales_person_user_id', auth()->id()) === (string) data_get($u, 'id'))>
+                                                    {{ data_get($u, 'name') }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        @error('sales_person_user_id')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
 
-                                        <div class="col-6">
-                                            <div class="text-muted small">Salesperson</div>
-                                            <select class="form-select @error('sales_person_user_id') is-invalid @enderror"
-                                                name="sales_person_user_id" required>
-                                                @foreach ($salesPeople ?? collect() as $u)
-                                                    <option value="{{ data_get($u, 'id') }}" @selected((string) old('sales_person_user_id', auth()->id()) === (string) data_get($u, 'id'))>
-                                                        {{ data_get($u, 'name') }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            @error('sales_person_user_id')
-                                                <div class="invalid-feedback">{{ $message }}</div>
-                                            @enderror
-                                        </div>
+                                    <div class="col-12">
+                                        <div class="text-muted small">Associate Deal (optional)</div>
+                                        <select class="form-select" name="deal_id" id="dealSelect">
+                                            <option value="">— none —</option>
+                                            @foreach ($deals ?? collect() as $d)
+                                                <option value="{{ data_get($d, 'id') }}" @selected((string) old('deal_id') === (string) data_get($d, 'id'))>
+                                                    #{{ data_get($d, 'id') }} • {{ data_get($d, 'title') }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
 
-                                        <div class="col-12">
-                                            <div class="text-muted small">Associate Deal (optional)</div>
-                                            <select class="form-select" name="deal_id" id="dealSelect">
-                                                <option value="">— none —</option>
-                                                @foreach ($deals ?? collect() as $d)
-                                                    <option value="{{ data_get($d, 'id') }}" @selected((string) old('deal_id') === (string) data_get($d, 'id'))>
-                                                        #{{ data_get($d, 'id') }} • {{ data_get($d, 'title') }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <div class="text-muted small">Reference #</div>
-                                            <input type="text" class="form-control" name="reference" maxlength="120"
-                                                value="{{ old('reference') }}"
-                                                placeholder="e.g. SO-REF / PO / Internal Ref">
-                                        </div>
-
+                                    <div class="col-12">
+                                        <div class="text-muted small">Reference #</div>
+                                        <input type="text" class="form-control" name="reference" maxlength="120"
+                                            value="{{ old('reference') }}" placeholder="e.g. SO-REF / PO / Internal Ref">
                                     </div>
                                 </div>
-                                <div class="form-text">Owner is who creates it; Salesperson gets credit.</div>
                             </div>
+                            <div class="form-text">Owner is who creates it; Salesperson gets credit.</div>
                         </div>
-
-                        <hr class="my-3">
-
-                        {{-- Customer select --}}
-                        <div class="row g-3">
-                            <div class="col-12 col-lg-8">
-                                <label class="form-label">Customer Name <span class="text-danger">*</span></label>
-                                <select class="form-select @error('company_id') is-invalid @enderror" name="company_id"
-                                    id="companySelect"
-                                    data-contacts-url-template="{{ tenant_route('tenant.companies.contacts.index', ['company' => '__ID__']) }}"
-                                    data-prefill-contact-id="{{ (string) old('contact_id', $prefillContactId ?? '') }}"
-                                    data-prefill-company-id="{{ (string) old('company_id', $prefillCompanyId ?? '') }}"
-                                    required>
-                                    <option value="">— select company —</option>
-                                    @foreach ($companies ?? collect() as $c)
-                                        <option value="{{ data_get($c, 'id') }}" @selected((string) old('company_id', $prefillCompanyId ?? null) === (string) data_get($c, 'id'))>
-                                            {{ data_get($c, 'name') }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('company_id')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                @enderror
-                                <div class="form-text">Company details show below after selecting.</div>
-                            </div>
-
-                            <div class="col-12 col-lg-4">
-                                <label class="form-label">Contact (optional)</label>
-                                <select class="form-select" name="contact_id" id="contactSelect">
-                                    <option value="">— none —</option>
-                                    {{-- loaded via AJAX based on company --}}
-                                </select>
-                            </div>
-                        </div>
-
-                        {{-- Bill To / Ship To --}}
-                        <div class="row g-3 mt-2">
-                            <div class="col-12 col-lg-6">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <div class="text-muted small fw-semibold">BILL TO (BILLING)</div>
-                                    <div class="text-muted small" id="vatTreatmentLine"></div>
-                                </div>
-                                <div class="border rounded p-3" id="billingBox">
-                                    <div class="text-muted small">Select a company to view billing address.</div>
-                                </div>
-
-                                <div class="mt-2">
-                                    <div class="text-muted small">Payment Terms</div>
-                                    <div class="fw-semibold" id="paymentTermsLine">—</div>
-                                </div>
-                            </div>
-
-                            <div class="col-12 col-lg-6">
-                                <div class="text-muted small fw-semibold mb-1">SHIP TO (DELIVERY)</div>
-                                <div class="border rounded p-3" id="shippingBox">
-                                    <div class="text-muted small">Select a company to view shipping address.</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="my-3">
-
-                        {{-- Default VAT (for new rows) --}}
-                        <div class="row g-3">
-                            <div class="col-12 col-lg-4">
-                                <label class="form-label">Default VAT</label>
-                                <select class="form-select" name="tax_type_id" id="defaultTaxType">
-                                    @foreach ($taxTypes ?? collect() as $t)
-                                        <option value="{{ data_get($t, 'id') }}" @selected((string) old('tax_type_id', $defaultTaxTypeId ?? null) === (string) data_get($t, 'id'))>
-                                            {{ data_get($t, 'name') }}
-                                            ({{ number_format((float) data_get($t, 'rate', 0), 2) }}%)
-                                        </option>
-                                    @endforeach
-                                </select>
-                                <div class="form-text">New rows will use this VAT by default.</div>
-                            </div>
-                        </div>
-
                     </div>
+
+                    <hr class="my-3">
+
+                    {{-- Customer + Contact --}}
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-8">
+                            <label class="form-label">Customer Name <span class="text-danger">*</span></label>
+                            <select class="form-select @error('company_id') is-invalid @enderror" name="company_id"
+                                id="companySelect"
+                                data-contacts-url-template="{{ tenant_route('tenant.companies.contacts.index', ['company' => '__ID__']) }}"
+                                data-prefill-contact-id="{{ (string) old('contact_id', $prefillContactId ?? '') }}"
+                                data-prefill-company-id="{{ (string) old('company_id', $prefillCompanyId ?? '') }}"
+                                required>
+                                <option value="">— select company —</option>
+                                @foreach ($companies ?? collect() as $c)
+                                    <option value="{{ data_get($c, 'id') }}" @selected((string) old('company_id', $prefillCompanyId ?? null) === (string) data_get($c, 'id'))>
+                                        {{ data_get($c, 'name') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('company_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            <div class="form-text">Company details show below after selecting.</div>
+                        </div>
+
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label">Contact (optional)</label>
+                            <select class="form-select" name="contact_id" id="contactSelect">
+                                <option value="">— none —</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {{-- Bill / Ship --}}
+                    <div class="row g-3 mt-2">
+                        <div class="col-12 col-lg-6">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="text-muted small fw-semibold">BILL TO (BILLING)</div>
+                                <div class="text-muted small" id="vatTreatmentLine"></div>
+                            </div>
+                            <div class="border rounded p-3" id="billingBox">
+                                <div class="text-muted small">Select a company to view billing address.</div>
+                            </div>
+
+                            <div class="mt-2">
+                                <div class="text-muted small">Payment Terms</div>
+                                <div class="fw-semibold" id="paymentTermsLine">—</div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-lg-6">
+                            <div class="text-muted small fw-semibold mb-1">SHIP TO (DELIVERY)</div>
+                            <div class="border rounded p-3" id="shippingBox">
+                                <div class="text-muted small">Select a company to view shipping address.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+
+                    {{-- Default VAT --}}
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-4">
+                            <label class="form-label">Default VAT</label>
+                            <select class="form-select" name="tax_type_id" id="defaultTaxType">
+                                @foreach ($taxTypes ?? collect() as $t)
+                                    <option value="{{ data_get($t, 'id') }}" @selected((string) old('tax_type_id', $defaultTaxTypeId ?? null) === (string) data_get($t, 'id'))>
+                                        {{ data_get($t, 'name') }}
+                                        ({{ number_format((float) data_get($t, 'rate', 0), 2) }}%)
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">New rows will use this VAT by default.</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {{-- ITEMS --}}
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="fw-semibold">Items</div>
+                    <div class="text-muted small">Click ITEM to pick from dropdown. Type to search by SKU or name.</div>
                 </div>
 
-                {{-- ITEMS TABLE --}}
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div class="fw-semibold">Items</div>
-                        <div class="text-muted small">Type to search products. Description only shows after selection.
-                        </div>
+                <div class="card-body">
+
+                    <div class="table-responsive nw-overflow-visible">
+                        <table class="table align-middle table-sm nw-quote-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 42%;">ITEM</th>
+                                    <th style="width: 10%;">SKU</th>
+                                    <th style="width: 10%;">QTY</th>
+                                    <th style="width: 12%;">RATE</th>
+                                    <th style="width: 10%;">DISC %</th>
+                                    <th style="width: 14%;">VAT</th>
+                                    <th class="text-end nw-amount-col">LINE</th>
+                                    <th class="text-end nw-amount-col">INCL</th>
+                                    <th style="width: 2%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody"></tbody>
+                        </table>
                     </div>
 
-                    <div class="card-body">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="addItemBtn">+ Add New Row</button>
 
-                        <div class="table-responsive nw-overflow-visible">
-                            <table class="table align-middle table-sm nw-quote-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 42%;">ITEM</th>
-                                        <th style="width: 10%;">SKU</th>
-                                        <th style="width: 10%;">QTY</th>
-                                        <th style="width: 12%;">RATE</th>
-                                        <th style="width: 10%;">DISC %</th>
-                                        <th style="width: 14%;">VAT</th>
-                                        <th class="text-end nw-amount-col">LINE</th>
-                                        <th class="text-end nw-amount-col">INCL</th>
-                                        <th style="width: 2%;"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="itemsBody"></tbody>
-                            </table>
-                        </div>
+                    <div class="row mt-4">
+                        <div class="col-12 col-lg-6">
+                            <label class="form-label">Customer Notes</label>
+                            <textarea class="form-control" name="notes" rows="4" placeholder="Will be displayed on the sales order">{{ old('notes') }}</textarea>
 
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="addItemBtn">+ Add New
-                            Row</button>
-
-                        <div class="row mt-4">
-                            <div class="col-12 col-lg-6">
-                                <label class="form-label">Customer Notes</label>
-                                <textarea class="form-control" name="notes" rows="4" placeholder="Will be displayed on the sales order">{{ old('notes') }}</textarea>
-
-                                <div class="mt-3">
-                                    <label class="form-label">Terms</label>
-                                    <textarea class="form-control" name="terms" rows="4">{{ old('terms') }}</textarea>
-                                </div>
-
-                                <div class="mt-4 border rounded p-3">
-                                    <div class="fw-semibold mb-2">Signatures</div>
-                                    <div class="row g-3">
-                                        <div class="col-12 col-md-6">
-                                            <div class="text-muted small">Prepared by</div>
-                                            <div class="border-bottom" style="height:24px;"></div>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <div class="text-muted small">Approved by</div>
-                                            <div class="border-bottom" style="height:24px;"></div>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <div class="text-muted small">Signature</div>
-                                            <div class="border-bottom" style="height:24px;"></div>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <div class="text-muted small">Date</div>
-                                            <div class="border-bottom" style="height:24px;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-
+                            <div class="mt-3">
+                                <label class="form-label">Terms</label>
+                                <textarea class="form-control" name="terms" rows="4">{{ old('terms') }}</textarea>
                             </div>
 
-                            <div class="col-12 col-lg-6 d-flex justify-content-end">
-                                <div class="border rounded p-4" style="min-width: 360px;">
-                                    <div class="d-flex justify-content-between">
-                                        <div class="fw-semibold">Subtotal</div>
-                                        <div class="fw-semibold">R <span id="subtotal">0.00</span></div>
+                            <div class="mt-4 border rounded p-3">
+                                <div class="fw-semibold mb-2">Signatures</div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <div class="text-muted small">Prepared by</div>
+                                        <div class="border-bottom" style="height:24px;"></div>
                                     </div>
-
-                                    <div class="d-flex justify-content-between mt-2">
-                                        <div class="text-muted">Discount</div>
-                                        <div class="fw-semibold">- R <span id="discountTotal">0.00</span></div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="text-muted small">Approved by</div>
+                                        <div class="border-bottom" style="height:24px;"></div>
                                     </div>
-
-                                    <div class="d-flex justify-content-between mt-2">
-                                        <div class="text-muted">VAT Total</div>
-                                        <div class="fw-semibold">R <span id="taxAmount">0.00</span></div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="text-muted small">Signature</div>
+                                        <div class="border-bottom" style="height:24px;"></div>
                                     </div>
-
-                                    <hr>
-
-                                    <div class="d-flex justify-content-between">
-                                        <div class="fw-semibold">Grand Total</div>
-                                        <div class="fw-semibold">R <span id="grandTotal">0.00</span></div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="text-muted small">Date</div>
+                                        <div class="border-bottom" style="height:24px;"></div>
                                     </div>
-
-                                    <div class="text-muted small mt-2">
-                                        Totals are calculated from Qty × Rate − Discount + VAT (per line).
-                                    </div>
-
-                                    @if (!empty($tenant->bank_details))
-                                        <hr class="my-3">
-                                        <div class="fw-semibold mb-1">Bank Details</div>
-                                        <div class="text-muted small" style="white-space: pre-wrap;">
-                                            {{ $tenant->bank_details }}</div>
-                                    @endif
                                 </div>
                             </div>
                         </div>
 
-                        <div class="d-flex gap-2 mt-3">
-                            <button class="btn btn-primary" type="submit">Create Sales Order</button>
-                            <a class="btn btn-light" href="{{ tenant_route('tenant.sales-orders.index') }}">Cancel</a>
-                        </div>
+                        <div class="col-12 col-lg-6 d-flex justify-content-end">
+                            <div class="border rounded p-4" style="min-width: 360px;">
+                                <div class="d-flex justify-content-between">
+                                    <div class="fw-semibold">Subtotal</div>
+                                    <div class="fw-semibold">R <span id="subtotal">0.00</span></div>
+                                </div>
 
+                                <div class="d-flex justify-content-between mt-2">
+                                    <div class="text-muted">Discount</div>
+                                    <div class="fw-semibold">- R <span id="discountTotal">0.00</span></div>
+                                </div>
+
+                                <div class="d-flex justify-content-between mt-2">
+                                    <div class="text-muted">VAT Total</div>
+                                    <div class="fw-semibold">R <span id="taxAmount">0.00</span></div>
+                                </div>
+
+                                <hr>
+
+                                <div class="d-flex justify-content-between">
+                                    <div class="fw-semibold">Grand Total</div>
+                                    <div class="fw-semibold">R <span id="grandTotal">0.00</span></div>
+                                </div>
+
+                                <div class="text-muted small mt-2">
+                                    Totals are calculated from Qty × Rate − Discount + VAT (per line).
+                                </div>
+
+                                @if (!empty($tenant->bank_details))
+                                    <hr class="my-3">
+                                    <div class="fw-semibold mb-1">Bank Details</div>
+                                    <div class="text-muted small" style="white-space: pre-wrap;">
+                                        {{ $tenant->bank_details }}</div>
+                                @endif
+                            </div>
+                        </div>
                     </div>
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-primary" type="submit">Create Sales Order</button>
+                        <a class="btn btn-light" href="{{ tenant_route('tenant.sales-orders.index') }}">Cancel</a>
+                    </div>
+
                 </div>
+            </div>
 
         </form>
     </div>
+
+    {{-- ✅ Quick Add Product Modal (supports Brand + Category if your partial includes them) --}}
+    @include('tenant.products.partials.quick_add_modal', [
+        'taxTypes' => $taxTypes ?? collect(),
+        'brands' => $brands ?? collect(),
+        'categories' => $categories ?? collect(),
+    ])
 @endsection
 
 @push('styles')
     <style>
-        /* Same as Quotes */
         .nw-quote-table,
         .nw-quote-table td,
         .nw-quote-table th {
@@ -354,13 +383,13 @@
             border: 1px solid rgba(0, 0, 0, .125);
             border-radius: .5rem;
             box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
-            max-height: 260px;
+            max-height: 280px;
             overflow: auto;
             display: none;
         }
 
         .nw-suggest .nw-opt {
-            padding: .45rem .6rem;
+            padding: .55rem .65rem;
             cursor: pointer;
             border-bottom: 1px solid rgba(0, 0, 0, .06);
         }
@@ -375,7 +404,7 @@
         }
 
         .nw-opt .nw-name {
-            font-weight: 600;
+            font-weight: 700;
             line-height: 1.2;
         }
 
@@ -383,22 +412,51 @@
             font-size: .72rem;
             color: #6c757d;
             line-height: 1.2;
-            margin-top: .1rem;
+            margin-top: .2rem;
+            display: flex;
+            justify-content: space-between;
+            gap: .6rem;
+        }
+
+        .nw-opt .nw-right {
+            white-space: nowrap;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action {
+            position: sticky;
+            bottom: 0;
+            background: var(--bs-body-bg);
+            border-top: 1px solid rgba(0, 0, 0, .08);
+            border-bottom: 0;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action:hover {
+            background: rgba(13, 110, 253, .06);
+        }
+
+        .nw-search-wrap .btn {
+            padding: .18rem .45rem;
+            line-height: 1;
+            font-size: .78rem;
         }
     </style>
 @endpush
 
 @push('scripts')
-    <script>
-        // Global Data
-        window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
-        window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
-        window.NW_OLD_ITEMS = @json(old('items', []));
-        window.NW_COMPANIES = @json($companiesJson ?? ($companies ?? collect())->keyBy('id'));
+    {{-- Quick add modal scripts (ONLY source of truth for NWQuickProduct) --}}
+    @include('tenant.products.partials.quick_add_modal_scripts')
 
+    <script>
         document.addEventListener('DOMContentLoaded', function() {
 
-            // A) CONTACTS loader (same pattern as Quote)
+            // Globals for picker
+            window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
+            window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
+            window.NW_COMPANIES = @json($companiesJson ?? $companiesJsonLocal);
+            window.NW_OLD_ITEMS = @json($seedItems);
+            window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
+
+            // A) Contacts loader
             (function initContactsLoader() {
                 const companySelect = document.getElementById('companySelect');
                 const contactSelect = document.getElementById('contactSelect');
@@ -410,7 +468,6 @@
                 function setContactOptions(contacts, selectedId) {
                     const current = String(selectedId || '');
                     contactSelect.innerHTML = `<option value="">— none —</option>`;
-
                     (contacts || []).forEach(c => {
                         const id = String(c.id ?? '');
                         const label = c.name || ('Contact #' + id);
@@ -424,20 +481,13 @@
 
                 async function loadContactsForCompany(companyId, selectedId = '') {
                     const cid = String(companyId || '').trim();
-                    if (!cid) {
-                        setContactOptions([], '');
-                        return;
-                    }
+                    if (!cid) return setContactOptions([], '');
 
                     const url = urlTemplate.replace('__ID__', encodeURIComponent(cid));
-                    if (!url || url.includes('__ID__')) {
-                        setContactOptions([], '');
-                        return;
-                    }
+                    if (!url || url.includes('__ID__')) return setContactOptions([], '');
 
                     const keepSelected = String(selectedId || contactSelect.value || prefillContactId ||
-                        '');
-
+                    '');
                     contactSelect.innerHTML = `<option value="">Loading…</option>`;
 
                     try {
@@ -469,7 +519,7 @@
                 else setContactOptions([], '');
             })();
 
-            // B) Company blocks (billing/shipping/vat/payment terms)
+            // B) Company blocks
             (function initCompanyBlocks() {
                 const companySelect = document.getElementById('companySelect');
                 const billingBox = document.getElementById('billingBox');
@@ -515,16 +565,15 @@
                 refreshCompanyBlocks();
             })();
 
-            // C) Items table (copy from quotes, unchanged)
+            // C) Items picker
             (function initSalesOrderItems() {
+
                 const itemsBody = document.getElementById('itemsBody');
                 const addBtn = document.getElementById('addItemBtn');
                 const defaultTaxType = document.getElementById('defaultTaxType');
-
                 if (!itemsBody) return;
 
-                const RAW_PRODUCTS_OBJ = window.NW_PRODUCTS || {};
-                const PRODUCTS = Object.values(RAW_PRODUCTS_OBJ);
+                const PRODUCTS = Object.values(window.NW_PRODUCTS || {});
                 const TAXTYPES = window.NW_TAXTYPES || {};
 
                 function money(n) {
@@ -545,7 +594,6 @@
                     return (p.unit_rate ?? p.unit_price ?? p.price ?? p.selling_price ?? 0);
                 }
 
-                // Global suggest dropdown
                 const globalSuggest = document.createElement('div');
                 globalSuggest.className = 'nw-suggest';
                 document.body.appendChild(globalSuggest);
@@ -571,13 +619,23 @@
                     activeInput = null;
                 }
 
-                window.addEventListener('scroll', () => {
-                    if (globalSuggest.style.display === 'block') closeSuggest();
-                }, true);
+                function repositionSuggest() {
+                    if (globalSuggest.style.display !== 'block') return;
+                    if (!activeInput) return;
 
-                window.addEventListener('resize', () => {
-                    if (globalSuggest.style.display === 'block') closeSuggest();
+                    const r = activeInput.getBoundingClientRect();
+                    globalSuggest.style.left = r.left + 'px';
+                    globalSuggest.style.top = (r.bottom + 6) + 'px';
+                    globalSuggest.style.width = r.width + 'px';
+
+                    if (r.bottom < 0 || r.top > window.innerHeight) closeSuggest();
+                }
+
+                globalSuggest.addEventListener('wheel', (e) => e.stopPropagation(), {
+                    passive: true
                 });
+                window.addEventListener('scroll', repositionSuggest, true);
+                window.addEventListener('resize', repositionSuggest);
 
                 document.addEventListener('click', (e) => {
                     if (e.target.closest('.nw-picker')) return;
@@ -605,7 +663,6 @@
                 function findMatches(term, limit = 12) {
                     const t = (term || '').trim();
                     if (t.length < 1) return [];
-
                     const ranked = [];
                     for (const p of PRODUCTS) {
                         const s = scoreMatch(p, t);
@@ -626,6 +683,43 @@
                             `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
                     });
                     return html;
+                }
+
+                function buildSuggestActionsHtml() {
+                    if (!window.NW_CAN_CREATE_PRODUCT) return '';
+                    return `
+                        <div class="nw-opt nw-opt-action" data-action="create-product">
+                            <div class="nw-name">+ Create new product</div>
+                            <div class="nw-sub">
+                                <span>Add without leaving this sales order</span>
+                                <span class="nw-right">Enter ↵</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                function renderTopProducts(inputEl, rowEl) {
+                    const top = PRODUCTS.slice(0, 12);
+
+                    if (!top.length) {
+                        openSuggest(inputEl, rowEl,
+                            `<div class="nw-opt"><div class="nw-sub">No products</div></div>` +
+                            buildSuggestActionsHtml());
+                        return;
+                    }
+
+                    const html = top.map(p => {
+                        const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
+                            .filter(Boolean).join(' • ');
+                        return `
+                            <div class="nw-opt" data-id="${p.id}">
+                                <div class="nw-name">${p.name ?? '—'}</div>
+                                <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    openSuggest(inputEl, rowEl, html + buildSuggestActionsHtml());
                 }
 
                 function setSelectedUI(row, selected) {
@@ -675,7 +769,7 @@
                         discountTotal = 0,
                         taxTotal = 0;
 
-                    itemsBody.querySelectorAll('.quote-item-row').forEach(row => {
+                    itemsBody.querySelectorAll('.so-item-row').forEach(row => {
                         const qty = parseFloat(row.querySelector('.qty')?.value || '0');
                         const rate = parseFloat(row.querySelector('.unit_price')?.value || '0');
 
@@ -708,7 +802,7 @@
                 }
 
                 function reindex() {
-                    itemsBody.querySelectorAll('.quote-item-row').forEach((row, idx) => {
+                    itemsBody.querySelectorAll('.so-item-row').forEach((row, idx) => {
                         row.querySelectorAll('input,select,textarea').forEach(el => {
                             if (!el.name) return;
                             el.name = el.name.replace(/items\[\d+\]/, `items[${idx}]`);
@@ -717,18 +811,21 @@
                 }
 
                 function addRow(prefill = {}) {
-                    const idx = itemsBody.querySelectorAll('.quote-item-row').length;
+                    const idx = itemsBody.querySelectorAll('.so-item-row').length;
                     const defaultTaxId = prefill.tax_type_id ?? (defaultTaxType?.value || '');
 
                     const tr = document.createElement('tr');
-                    tr.className = 'quote-item-row';
+                    tr.className = 'so-item-row';
 
                     tr.innerHTML = `
                         <td>
                             <div class="nw-picker">
                                 <div class="nw-search-wrap">
-                                    <input type="text" class="form-control form-control-sm nw-search"
-                                           placeholder="Search SKU or name…" autocomplete="off">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control nw-search"
+                                            placeholder="Click to select or type to search…" autocomplete="off">
+                                        <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                                    </div>
                                 </div>
 
                                 <div class="nw-picked">
@@ -743,8 +840,8 @@
 
                                 <div class="nw-desc-wrap">
                                     <textarea class="form-control form-control-sm itemDesc"
-                                              name="items[${idx}][description]" rows="2"
-                                              placeholder="Description…">${String(prefill.description ?? '')}</textarea>
+                                        name="items[${idx}][description]" rows="2"
+                                        placeholder="Description…">${String(prefill.description ?? '')}</textarea>
                                 </div>
                             </div>
                         </td>
@@ -752,13 +849,13 @@
                         <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
 
                         <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                                   name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+                            name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
 
                         <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                                   name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+                            name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
 
                         <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                                   name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
+                            name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
 
                         <td>
                             <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
@@ -783,14 +880,14 @@
 
                         if (!matches.length) {
                             openSuggest(input, tr,
-                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>`);
+                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>` +
+                                buildSuggestActionsHtml());
                             return;
                         }
 
                         const html = matches.map(p => {
                             const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                                 .filter(Boolean).join(' • ');
-
                             return `
                                 <div class="nw-opt" data-id="${p.id}">
                                     <div class="nw-name">${p.name ?? '—'}</div>
@@ -799,16 +896,84 @@
                             `;
                         }).join('');
 
-                        openSuggest(input, tr, html);
+                        openSuggest(input, tr, html + buildSuggestActionsHtml());
                     }
 
-                    input.addEventListener('focus', () => (input.value || '').trim() && renderDropdown(input
-                        .value));
+                    input.addEventListener('click', () => {
+                        if (!(input.value || '').trim()) return renderTopProducts(input, tr);
+                        renderDropdown(input.value);
+                    });
+
+                    input.addEventListener('focus', () => {
+                        if (!(input.value || '').trim()) return;
+                        renderDropdown(input.value);
+                    });
+
                     input.addEventListener('input', () => renderDropdown(input.value));
+
+                    input.addEventListener('keydown', (e) => {
+                        if (globalSuggest.style.display !== 'block') return;
+
+                        const opts = Array.from(globalSuggest.querySelectorAll(
+                            '.nw-opt[data-id], .nw-opt[data-action]'));
+                        if (!opts.length) return;
+
+                        let activeIndex = opts.findIndex(x => x.classList.contains('active'));
+
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            activeIndex = Math.min(opts.length - 1, activeIndex + 1);
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            activeIndex = Math.max(0, activeIndex - 1);
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+
+                            const chosen = opts[Math.max(0, activeIndex)] || opts[0];
+                            if (!chosen) return;
+
+                            const action = chosen.getAttribute('data-action');
+                            if (action === 'create-product') {
+                                // ✅ capture row/input BEFORE closeSuggest() clears them
+                                const row = tr;
+                                const name = (input.value || '').trim();
+                                const taxTypeId = row.querySelector('.taxType')?.value || (
+                                    defaultTaxType?.value || '');
+
+                                closeSuggest();
+
+                                window.NWQuickProduct?.open({
+                                    row,
+                                    name,
+                                    tax_type_id: taxTypeId,
+                                    afterCreate: (product, r) => {
+                                        PRODUCTS.push(product);
+                                        applyProduct(r, product.id);
+                                    }
+                                });
+                                return;
+                            }
+
+                            const id = chosen.getAttribute('data-id');
+                            if (id) applyProduct(tr, id);
+                            closeSuggest();
+                            return;
+                        } else if (e.key === 'Escape') {
+                            closeSuggest();
+                            return;
+                        } else {
+                            return;
+                        }
+
+                        opts.forEach(x => x.classList.remove('active'));
+                        opts[activeIndex]?.classList.add('active');
+                        opts[activeIndex]?.scrollIntoView({
+                            block: 'nearest'
+                        });
+                    });
 
                     if (prefill.product_id) {
                         applyProduct(tr, prefill.product_id);
-                        setSelectedUI(tr, true);
                     } else {
                         setSelectedUI(tr, false);
                     }
@@ -816,22 +981,53 @@
                     recalc();
                 }
 
-                globalSuggest.addEventListener('mousedown', (e) => {
-                    const opt = e.target.closest('.nw-opt[data-id]');
+                // ✅ Dropdown selection handler (CAPTURE + pointerdown) — FIXED for create-product
+                function handleSuggestSelect(e) {
+                    const opt = e.target.closest('.nw-opt');
                     if (!opt) return;
+                    if (e.button != null && e.button !== 0) return;
+
                     e.preventDefault();
-                    if (!activeRow) return;
+                    e.stopPropagation();
 
-                    applyProduct(activeRow, opt.getAttribute('data-id'));
-                    closeSuggest();
-                });
+                    const action = opt.getAttribute('data-action');
+                    if (action === 'create-product') {
+                        // ✅ capture BEFORE closing
+                        const row = activeRow;
+                        const name = (activeInput?.value || '').trim();
+                        const taxTypeId = row?.querySelector('.taxType')?.value || (defaultTaxType?.value ||
+                        '');
 
+                        closeSuggest();
+
+                        window.NWQuickProduct?.open({
+                            row,
+                            name,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                            }
+                        });
+
+                        return;
+                    }
+
+                    const id = opt.getAttribute('data-id');
+                    if (id && activeRow) {
+                        applyProduct(activeRow, id);
+                        closeSuggest();
+                    }
+                }
+                globalSuggest.addEventListener('pointerdown', handleSuggestSelect, true);
+
+                // Boot rows
                 const old = window.NW_OLD_ITEMS || [];
                 if (old.length) old.forEach(it => addRow(it));
                 else addRow();
 
                 itemsBody.addEventListener('change', (e) => {
-                    const row = e.target.closest('.quote-item-row');
+                    const row = e.target.closest('.so-item-row');
                     if (!row) return;
                     if (e.target.classList.contains('taxType')) recalc();
                 });
@@ -843,13 +1039,32 @@
                 });
 
                 itemsBody.addEventListener('click', (e) => {
-                    const row = e.target.closest('.quote-item-row');
+                    const row = e.target.closest('.so-item-row');
                     if (!row) return;
+
+                    const addBtnClick = e.target.closest('.nw-add-product');
+                    if (addBtnClick) {
+                        const term = (row.querySelector('.nw-search')?.value || '').trim();
+                        const taxTypeId = row.querySelector('.taxType')?.value || (defaultTaxType
+                            ?.value || '');
+
+                        window.NWQuickProduct?.open({
+                            row,
+                            name: term,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                                closeSuggest();
+                            }
+                        });
+                        return;
+                    }
 
                     if (e.target.classList.contains('clearProductBtn')) return clearProduct(row);
 
                     if (e.target.classList.contains('removeItemBtn')) {
-                        if (itemsBody.querySelectorAll('.quote-item-row').length <= 1) {
+                        if (itemsBody.querySelectorAll('.so-item-row').length <= 1) {
                             clearProduct(row);
                             row.querySelector('.qty').value = 1;
                             row.querySelector('.unit_price').value = 0;
@@ -867,7 +1082,7 @@
                 addBtn?.addEventListener('click', () => addRow());
 
                 defaultTaxType?.addEventListener('change', () => {
-                    itemsBody.querySelectorAll('.quote-item-row .taxType').forEach(sel => {
+                    itemsBody.querySelectorAll('.so-item-row .taxType').forEach(sel => {
                         if (!sel.value) sel.value = defaultTaxType.value;
                     });
                     recalc();
@@ -875,7 +1090,6 @@
 
                 recalc();
             })();
-
         });
     </script>
 @endpush

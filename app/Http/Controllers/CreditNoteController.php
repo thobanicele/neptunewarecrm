@@ -9,6 +9,8 @@ use App\Models\Contact;
 use App\Models\Invoice;
 use App\Models\TransactionAllocation;
 use App\Models\CreditNote;
+use App\Models\Brand;
+use App\Models\Category;
 use Illuminate\Support\Facades\DB;
 use App\Models\Product;
 use App\Models\TaxType;
@@ -176,6 +178,16 @@ class CreditNoteController extends Controller
             ->orderBy('issued_at')
             ->orderBy('id')
             ->get(['id','company_id','invoice_number','issued_at','total']);
+
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+        
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
 
         $products = Product::query()
             ->where('tenant_id', $tenant->id)
@@ -416,7 +428,9 @@ class CreditNoteController extends Controller
             'refunded',
             'available',
             'billTo',
-            'shipTo'
+            'shipTo',
+            'brands',
+            'categories'
         ));
     }
 

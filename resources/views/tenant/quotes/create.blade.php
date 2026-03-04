@@ -190,8 +190,9 @@
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div class="fw-semibold">Items</div>
-                    <div class="text-muted small">Click ITEM to pick from a dropdown. Start typing to search by SKU or
-                        name.</div>
+                    <div class="text-muted small">
+                        Click ITEM to pick from a dropdown. Start typing to search by SKU or name.
+                    </div>
                 </div>
 
                 <div class="card-body">
@@ -282,7 +283,8 @@
                                     <hr class="my-3">
                                     <div class="fw-semibold mb-1">Bank Details</div>
                                     <div class="text-muted small" style="white-space: pre-wrap;">
-                                        {{ $tenant->bank_details }}</div>
+                                        {{ $tenant->bank_details }}
+                                    </div>
                                 @endif
                             </div>
                         </div>
@@ -298,110 +300,8 @@
         </form>
     </div>
 
-    {{-- Create Product Modal --}}
-    <div class="modal fade" id="createProductModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Create Product</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-
-                <form id="createProductForm">
-                    <div class="modal-body">
-                        <div class="row g-3">
-
-                            <div class="col-md-8">
-                                <label class="form-label">Product name</label>
-                                <input class="form-control" name="name" required>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label">SKU</label>
-                                <input class="form-control" name="sku" required>
-                            </div>
-
-                            {{-- ✅ NEW: Brand --}}
-                            <div class="col-md-6">
-                                <label class="form-label">Brand (optional)</label>
-                                <select class="form-select" name="brand_id">
-                                    <option value="">— none —</option>
-                                    @foreach ($brands ?? collect() as $b)
-                                        <option value="{{ data_get($b, 'id') }}">{{ data_get($b, 'name') }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            {{-- ✅ NEW: Category --}}
-                            <div class="col-md-6">
-                                <label class="form-label">Category (optional)</label>
-                                <select class="form-select" name="category_id">
-                                    <option value="">— none —</option>
-                                    @foreach ($categories ?? collect() as $c)
-                                        <option value="{{ data_get($c, 'id') }}">{{ data_get($c, 'name') }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label">Rate</label>
-                                <input class="form-control" name="unit_rate" type="number" step="0.01"
-                                    min="0" value="0">
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label">Unit</label>
-                                <input class="form-control" name="unit" placeholder="pcs">
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label">Currency</label>
-                                <input class="form-control" name="currency" placeholder="R">
-                            </div>
-
-                            <div class="col-12">
-                                <label class="form-label">Description</label>
-                                <textarea class="form-control" name="description" rows="3"></textarea>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label">Default VAT (optional)</label>
-                                <select class="form-select" name="tax_type_id">
-                                    <option value="">— none —</option>
-                                    @foreach ($taxTypes ?? collect() as $t)
-                                        <option value="{{ data_get($t, 'id') }}">
-                                            {{ data_get($t, 'name') }}
-                                            ({{ number_format((float) data_get($t, 'rate', 0), 2) }}%)
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-
-                            <div class="col-md-6 d-flex align-items-end">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="is_active" id="p_is_active"
-                                        value="1" checked>
-                                    <label class="form-check-label" for="p_is_active">Active</label>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <div class="alert alert-danger mt-3 d-none" id="createProductError"></div>
-                        <div class="text-muted small mt-2">
-                            This will add the product to your tenant and select it in the quote row automatically.
-                        </div>
-                    </div>
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="createProductSubmitBtn">Create
-                            product</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+    {{-- Reusable Quick Add Product Modal (partial) --}}
+    @include('tenant.products.partials.quick_add_modal', ['taxTypes' => $taxTypes ?? collect()])
 @endsection
 
 @push('styles')
@@ -502,659 +402,599 @@
         .nw-suggest .nw-opt.nw-opt-action:hover {
             background: rgba(13, 110, 253, .06);
         }
+
+        /* + button size */
+        .nw-search-wrap .btn {
+            padding: .18rem .45rem;
+            line-height: 1;
+            font-size: .78rem;
+        }
     </style>
 @endpush
 
-<script>
-    // ============================
-    // Global Data
-    // ============================
-    window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
-    window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
-    window.NW_OLD_ITEMS = @json(old('items', []));
-    window.NW_COMPANIES = @json($companiesJson ?? ($companies ?? collect())->keyBy('id'));
+@push('scripts')
+    {{-- Quick Add Product JS (partial) --}}
+    @include('tenant.products.partials.quick_add_modal_scripts')
 
-    // ✅ Spatie permission string
-    window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
-    window.NW_PRODUCT_STORE_URL = @json(tenant_route('tenant.products.store'));
+    <script>
+        window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
+        window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
+        window.NW_OLD_ITEMS = @json(old('items', []));
+        window.NW_COMPANIES = @json($companiesJson ?? ($companies ?? collect())->keyBy('id'));
+        window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
 
-    document.addEventListener('DOMContentLoaded', function() {
-        // ============================================================
-        // A) CONTACTS (company -> contacts)
-        // ============================================================
-        (function initContactsLoader() {
-            const companySelect = document.getElementById('companySelect');
-            const contactSelect = document.getElementById('contactSelect');
-            if (!companySelect || !contactSelect) return;
+        document.addEventListener('DOMContentLoaded', function() {
 
-            const urlTemplate = companySelect.getAttribute('data-contacts-url-template') || '';
-            const prefillContactId = String(companySelect.getAttribute('data-prefill-contact-id') || '');
+            // ============================
+            // CONTACTS loader
+            // ============================
+            (function initContactsLoader() {
+                const companySelect = document.getElementById('companySelect');
+                const contactSelect = document.getElementById('contactSelect');
+                if (!companySelect || !contactSelect) return;
 
-            function setContactOptions(contacts, selectedId) {
-                const current = String(selectedId || '');
-                contactSelect.innerHTML = `<option value="">— none —</option>`;
-                (contacts || []).forEach(c => {
-                    const id = String(c.id ?? '');
-                    const label = c.name || ('Contact #' + id);
-                    const opt = document.createElement('option');
-                    opt.value = id;
-                    opt.textContent = label;
-                    if (current && id === current) opt.selected = true;
-                    contactSelect.appendChild(opt);
-                });
-            }
+                const urlTemplate = companySelect.getAttribute('data-contacts-url-template') || '';
+                const prefillContactId = String(companySelect.getAttribute('data-prefill-contact-id') || '');
 
-            async function loadContactsForCompany(companyId, selectedId = '') {
-                const cid = String(companyId || '').trim();
-                if (!cid) return setContactOptions([], '');
+                function setContactOptions(contacts, selectedId) {
+                    const current = String(selectedId || '');
+                    contactSelect.innerHTML = `<option value="">— none —</option>`;
+                    (contacts || []).forEach(c => {
+                        const id = String(c.id ?? '');
+                        const label = c.name || ('Contact #' + id);
+                        const opt = document.createElement('option');
+                        opt.value = id;
+                        opt.textContent = label;
+                        if (current && id === current) opt.selected = true;
+                        contactSelect.appendChild(opt);
+                    });
+                }
 
-                const url = urlTemplate.replace('__ID__', encodeURIComponent(cid));
-                if (!url || url.includes('__ID__')) return setContactOptions([], '');
+                async function loadContactsForCompany(companyId, selectedId = '') {
+                    const cid = String(companyId || '').trim();
+                    if (!cid) return setContactOptions([], '');
 
-                const keepSelected = String(selectedId || contactSelect.value || prefillContactId ||
+                    const url = urlTemplate.replace('__ID__', encodeURIComponent(cid));
+                    if (!url || url.includes('__ID__')) return setContactOptions([], '');
+
+                    const keepSelected = String(selectedId || contactSelect.value || prefillContactId ||
                     '');
-                contactSelect.innerHTML = `<option value="">Loading…</option>`;
-
-                try {
-                    const res = await fetch(url, {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
-
-                    const data = await res.json();
-                    const contacts = Array.isArray(data.contacts) ? data.contacts : [];
-
-                    let finalSelected = keepSelected;
-                    if (finalSelected && !contacts.some(c => String(c.id) === String(finalSelected))) {
-                        finalSelected = contacts[0]?.id ? String(contacts[0].id) : '';
-                    }
-
-                    setContactOptions(contacts, finalSelected);
-                } catch (e) {
-                    console.error('[NW] Failed loading contacts', e);
-                    setContactOptions([], '');
-                }
-            }
-
-            companySelect.addEventListener('change', () => loadContactsForCompany(companySelect.value));
-            if (String(companySelect.value || '').trim()) loadContactsForCompany(companySelect.value,
-                prefillContactId);
-            else setContactOptions([], '');
-        })();
-
-        // ============================================================
-        // B) COMPANY BLOCKS
-        // ============================================================
-        (function initCompanyBlocks() {
-            const companySelect = document.getElementById('companySelect');
-            const billingBox = document.getElementById('billingBox');
-            const shippingBox = document.getElementById('shippingBox');
-            const vatTreatmentLine = document.getElementById('vatTreatmentLine');
-            const paymentTermsLine = document.getElementById('paymentTermsLine');
-
-            function nl2br(s) {
-                return (s || '').replace(/\n/g, '<br>');
-            }
-
-            function refreshCompanyBlocks() {
-                const id = companySelect?.value;
-                const c = (window.NW_COMPANIES || {})[id];
-
-                if (!c) {
-                    if (billingBox) billingBox.innerHTML =
-                        `<div class="text-muted small">Select a company to view billing address.</div>`;
-                    if (shippingBox) shippingBox.innerHTML =
-                        `<div class="text-muted small">Select a company to view shipping address.</div>`;
-                    if (vatTreatmentLine) vatTreatmentLine.textContent = '';
-                    if (paymentTermsLine) paymentTermsLine.textContent = '—';
-                    return;
-                }
-
-                const billing = c.billing_address || c.address || '';
-                const shipping = c.shipping_address || c.address || '';
-
-                if (billingBox) billingBox.innerHTML = billing.trim() ? nl2br(billing.trim()) :
-                    `<span class="text-muted small">—</span>`;
-                if (shippingBox) shippingBox.innerHTML = shipping.trim() ? nl2br(shipping.trim()) :
-                    `<span class="text-muted small">—</span>`;
-
-                const vt = c.vat_treatment || '';
-                const vn = c.vat_number || '';
-                if (vatTreatmentLine) vatTreatmentLine.textContent = (vt || vn) ?
-                    `VAT: ${vt}${vn ? ' • ' + vn : ''}` : '';
-                if (paymentTermsLine) paymentTermsLine.textContent = (c.payment_terms || '').trim() ? c
-                    .payment_terms : '—';
-            }
-
-            companySelect?.addEventListener('change', refreshCompanyBlocks);
-            refreshCompanyBlocks();
-        })();
-
-        // ============================================================
-        // C) PRODUCTS PICKER / ITEMS + CREATE PRODUCT MODAL
-        // ============================================================
-        (function initQuoteItems() {
-            const itemsBody = document.getElementById('itemsBody');
-            const addBtn = document.getElementById('addItemBtn');
-            const defaultTaxType = document.getElementById('defaultTaxType');
-            if (!itemsBody) return;
-
-            const PRODUCTS = Object.values(window.NW_PRODUCTS || {});
-            const TAXTYPES = window.NW_TAXTYPES || {};
-
-            // ---------- utils ----------
-            function money(n) {
-                const x = Number(n || 0);
-                return x.toLocaleString('en-ZA', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-            }
-
-            function clamp(n, min, max) {
-                const x = Number(n);
-                if (Number.isNaN(x)) return min;
-                return Math.min(max, Math.max(min, x));
-            }
-
-            function normalizeRate(p) {
-                return (p.unit_rate ?? p.unit_price ?? p.price ?? p.selling_price ?? 0);
-            }
-
-            function taxOptions(selectedId) {
-                let html = `<option value="">—</option>`;
-                Object.values(TAXTYPES).forEach(t => {
-                    const sel = String(t.id) === String(selectedId) ? 'selected' : '';
-                    html +=
-                        `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
-                });
-                return html;
-            }
-
-            // ---------- dropdown ----------
-            const globalSuggest = document.createElement('div');
-            globalSuggest.className = 'nw-suggest';
-            document.body.appendChild(globalSuggest);
-
-            function openSuggest(inputEl, rowEl, html) {
-                const r = inputEl.getBoundingClientRect();
-                globalSuggest.innerHTML = html;
-                globalSuggest.style.left = r.left + 'px';
-                globalSuggest.style.top = (r.bottom + 6) + 'px';
-                globalSuggest.style.width = r.width + 'px';
-                globalSuggest.style.display = 'block';
-                globalSuggest.__activeRow = rowEl;
-            }
-
-            function closeSuggest() {
-                globalSuggest.style.display = 'none';
-                globalSuggest.innerHTML = '';
-                globalSuggest.__activeRow = null;
-            }
-
-            document.addEventListener('click', (e) => {
-                if (e.target.closest('.nw-picker')) return;
-                if (e.target.closest('.nw-suggest')) return;
-                closeSuggest();
-            });
-
-            function scoreMatch(p, term) {
-                const t = (term || '').toLowerCase().trim();
-                if (!t) return -1;
-                const sku = String(p.sku || '').toLowerCase();
-                const name = String(p.name || '').toLowerCase();
-                const desc = String(p.description || '').toLowerCase();
-
-                let score = -1;
-                if (sku.startsWith(t)) score = Math.max(score, 120);
-                if (name.startsWith(t)) score = Math.max(score, 110);
-                if (sku.includes(t)) score = Math.max(score, 90);
-                if (name.includes(t)) score = Math.max(score, 80);
-                if (desc.includes(t)) score = Math.max(score, 50);
-                return score;
-            }
-
-            function findMatches(term, limit = 12) {
-                const t = (term || '').trim();
-                if (t.length < 1) return [];
-                const ranked = [];
-                for (const p of PRODUCTS) {
-                    const s = scoreMatch(p, t);
-                    if (s >= 0) ranked.push({
-                        p,
-                        s
-                    });
-                }
-                ranked.sort((a, b) => b.s - a.s);
-                return ranked.slice(0, limit).map(x => x.p);
-            }
-
-            function buildSuggestActionsHtml() {
-                if (!window.NW_CAN_CREATE_PRODUCT) return '';
-                return `
-                    <div class="nw-opt nw-opt-action" data-action="create-product">
-                        <div class="nw-name">+ Create new product</div>
-                        <div class="nw-sub">
-                            <span>Add without leaving this quote</span>
-                            <span class="nw-right">Enter ↵</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            function renderTopProducts(input, row) {
-                const top = PRODUCTS.slice(0, 12);
-                const html = top.map(p => {
-                    const rate = normalizeRate(p);
-                    return `
-                        <div class="nw-opt" data-id="${p.id}">
-                            <div class="nw-name">${p.name ?? '—'}</div>
-                            <div class="nw-sub"><span>SKU: ${p.sku ?? '—'} • Rate: R${money(rate)}</span></div>
-                        </div>
-                    `;
-                }).join('');
-                openSuggest(input, row, html + buildSuggestActionsHtml());
-            }
-
-            // ---------- row UI helpers ----------
-            function setSelectedUI(row, selected) {
-                const a = row.querySelector('.nw-search-wrap');
-                const b = row.querySelector('.nw-picked');
-                const c = row.querySelector('.nw-desc-wrap');
-                if (a) a.style.display = selected ? 'none' : 'block';
-                if (b) b.style.display = selected ? 'block' : 'none';
-                if (c) c.style.display = selected ? 'block' : 'none';
-            }
-
-            function applyProduct(row, productId) {
-                const map = window.NW_PRODUCTS || {};
-                const p = map[productId] || map[String(productId)];
-                if (!p) {
-                    console.warn('[NW] applyProduct: product not found in map', productId);
-                    return;
-                }
-
-                row.querySelector('.product_id').value = p.id;
-                row.querySelector('.sku').value = p.sku ?? '';
-                row.querySelector('.pickedText').value = `${p.name ?? ''}${p.sku ? ' • ' + p.sku : ''}`;
-                row.querySelector('.itemName').value = p.name ?? '';
-                row.querySelector('.itemDesc').value = p.description ?? '';
-                row.querySelector('.unit_price').value = normalizeRate(p);
-
-                setSelectedUI(row, true);
-                recalc();
-            }
-
-            function clearProduct(row) {
-                row.querySelector('.product_id').value = '';
-                row.querySelector('.sku').value = '';
-                row.querySelector('.pickedText').value = '';
-                row.querySelector('.itemName').value = '';
-                row.querySelector('.itemDesc').value = '';
-                row.querySelector('.unit_price').value = 0;
-
-                const inp = row.querySelector('.nw-search');
-                if (inp) inp.value = '';
-                setSelectedUI(row, false);
-                closeSuggest();
-                row.querySelector('.nw-search')?.focus();
-                recalc();
-            }
-
-            // ---------- totals ----------
-            function recalc() {
-                let subtotal = 0,
-                    discountTotal = 0,
-                    taxTotal = 0;
-
-                itemsBody.querySelectorAll('.quote-item-row').forEach(row => {
-                    const qty = parseFloat(row.querySelector('.qty')?.value || '0');
-                    const rate = parseFloat(row.querySelector('.unit_price')?.value || '0');
-
-                    const gross = qty * rate;
-                    const discPct = clamp(row.querySelector('.discount_pct')?.value || 0, 0, 100);
-                    const discAmt = gross * (discPct / 100);
-                    const net = gross - discAmt;
-
-                    const taxTypeId = row.querySelector('.taxType')?.value || '';
-                    const t = (window.NW_TAXTYPES || {})[taxTypeId] || (window.NW_TAXTYPES || {})[
-                        String(taxTypeId)];
-                    const vatRate = t ? parseFloat(t.rate || 0) : 0;
-
-                    const vat = net * (vatRate / 100);
-                    const incl = net + vat;
-
-                    subtotal += gross;
-                    discountTotal += discAmt;
-                    taxTotal += vat;
-
-                    row.querySelector('.lineExcl').textContent = money(net);
-                    row.querySelector('.lineIncl').textContent = money(incl);
-                });
-
-                document.getElementById('subtotal').textContent = money(subtotal);
-                document.getElementById('discountTotal').textContent = money(discountTotal);
-                document.getElementById('taxAmount').textContent = money(taxTotal);
-                document.getElementById('grandTotal').textContent = money((subtotal - discountTotal) +
-                    taxTotal);
-            }
-
-            function reindex() {
-                itemsBody.querySelectorAll('.quote-item-row').forEach((row, idx) => {
-                    row.querySelectorAll('input,select,textarea').forEach(el => {
-                        if (!el.name) return;
-                        el.name = el.name.replace(/items\[\d+\]/, `items[${idx}]`);
-                    });
-                });
-            }
-
-            // ============================================================
-            // MODAL: Create Product (AJAX)  ✅ FIXED row binding
-            // ============================================================
-            function openCreateProductModal(rowEl) {
-                if (!window.NW_CAN_CREATE_PRODUCT) return;
-
-                const modalEl = document.getElementById('createProductModal');
-                const form = document.getElementById('createProductForm');
-                const err = document.getElementById('createProductError');
-                const btn = document.getElementById('createProductSubmitBtn');
-
-                if (!modalEl || !form) return;
-
-                // ✅ bind row by reference (not by id)
-                modalEl.__activeRow = rowEl || null;
-
-                form.reset();
-                if (err) {
-                    err.classList.add('d-none');
-                    err.textContent = '';
-                }
-                if (btn) btn.disabled = false;
-
-                bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                setTimeout(() => form.querySelector('[name="name"]')?.focus(), 100);
-            }
-
-            async function createProduct(payload) {
-                const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute(
-                    'content') || '';
-
-                const res = await fetch(window.NW_PRODUCT_STORE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': token,
-                    },
-                    body: JSON.stringify(payload),
-                });
-
-                const data = await res.json().catch(() => ({}));
-
-                if (!res.ok) {
-                    if (data?.errors) {
-                        const first = Object.values(data.errors)[0];
-                        const msg = Array.isArray(first) ? first[0] : (data.message ||
-                            'Validation failed.');
-                        throw new Error(msg);
-                    }
-                    throw new Error(data.message || 'Failed to create product.');
-                }
-
-                return data;
-            }
-
-            (function bindCreateProductForm() {
-                const modalEl = document.getElementById('createProductModal');
-                const form = document.getElementById('createProductForm');
-                const err = document.getElementById('createProductError');
-                const btn = document.getElementById('createProductSubmitBtn');
-
-                if (!modalEl || !form) return;
-
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-
-                    if (err) {
-                        err.classList.add('d-none');
-                        err.textContent = '';
-                    }
-                    if (btn) btn.disabled = true;
-
-                    const fd = new FormData(form);
-                    const payload = Object.fromEntries(fd.entries());
-
-                    payload.unit_rate = Number(payload.unit_rate || 0);
-                    payload.tax_type_id = payload.tax_type_id ? Number(payload
-                        .tax_type_id) : null;
-                    payload.brand_id = payload.brand_id ? Number(payload.brand_id) : null;
-                    payload.category_id = payload.category_id ? Number(payload
-                        .category_id) : null;
-                    payload.is_active = !!payload.is_active;
+                    contactSelect.innerHTML = `<option value="">Loading…</option>`;
 
                     try {
-                        const created = await createProduct(payload);
+                        const res = await fetch(url, {
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
 
-                        // ✅ normalize response shapes
-                        const p = created.product || created.data || created;
-                        if (!p || !p.id) throw new Error(
-                            'Product created but response missing product data.');
+                        const data = await res.json();
+                        const contacts = Array.isArray(data.contacts) ? data.contacts : [];
 
-                        // ✅ update maps (string + number keys)
-                        window.NW_PRODUCTS[p.id] = p;
-                        window.NW_PRODUCTS[String(p.id)] = p;
-                        PRODUCTS.push(p);
-
-                        // ✅ apply to exact row reference
-                        const row = modalEl.__activeRow;
-                        if (row) {
-                            applyProduct(row, p.id);
-                        } else {
-                            console.warn(
-                                '[NW] Created product but no active row bound to modal.'
-                            );
+                        let finalSelected = keepSelected;
+                        if (finalSelected && !contacts.some(c => String(c.id) === String(finalSelected))) {
+                            finalSelected = contacts[0]?.id ? String(contacts[0].id) : '';
                         }
 
-                        bootstrap.Modal.getInstance(modalEl)?.hide();
-                    } catch (ex) {
-                        if (err) {
-                            err.textContent = ex.message || 'Could not create product.';
-                            err.classList.remove('d-none');
-                        }
-                    } finally {
-                        if (btn) btn.disabled = false;
+                        setContactOptions(contacts, finalSelected);
+                    } catch (e) {
+                        console.error('[NW] Failed loading contacts', e);
+                        setContactOptions([], '');
                     }
-                });
-            })();
-
-            // ============================================================
-            // Dropdown interactions
-            // ============================================================
-            globalSuggest.addEventListener('mousedown', (e) => {
-                // don’t lose focus when selecting
-                e.preventDefault();
-
-                const row = globalSuggest.__activeRow || null;
-
-                const action = e.target.closest('.nw-opt[data-action]');
-                if (action) {
-                    if (action.getAttribute('data-action') === 'create-product') {
-                        closeSuggest();
-                        openCreateProductModal(row);
-                    }
-                    return;
                 }
 
-                const opt = e.target.closest('.nw-opt[data-id]');
-                if (!opt || !row) return;
+                companySelect.addEventListener('change', () => loadContactsForCompany(companySelect.value));
+                if (String(companySelect.value || '').trim()) loadContactsForCompany(companySelect.value,
+                    prefillContactId);
+                else setContactOptions([], '');
+            })();
 
-                applyProduct(row, opt.getAttribute('data-id'));
-                closeSuggest();
-            });
+            // ============================
+            // COMPANY blocks
+            // ============================
+            (function initCompanyBlocks() {
+                const companySelect = document.getElementById('companySelect');
+                const billingBox = document.getElementById('billingBox');
+                const shippingBox = document.getElementById('shippingBox');
+                const vatTreatmentLine = document.getElementById('vatTreatmentLine');
+                const paymentTermsLine = document.getElementById('paymentTermsLine');
 
-            // ============================================================
-            // Row builder
-            // ============================================================
-            function addRow(prefill = {}) {
-                const idx = itemsBody.querySelectorAll('.quote-item-row').length;
-                const defaultTaxId = prefill.tax_type_id ?? (defaultTaxType?.value || '');
+                function nl2br(s) {
+                    return (s || '').replace(/\n/g, '<br>');
+                }
 
-                const tr = document.createElement('tr');
-                tr.className = 'quote-item-row';
+                function refreshCompanyBlocks() {
+                    const id = companySelect?.value;
+                    const c = (window.NW_COMPANIES || {})[id];
 
-                tr.innerHTML = `
-                    <td>
-                        <div class="nw-picker">
-                            <div class="nw-search-wrap">
-                                <input type="text" class="form-control form-control-sm nw-search"
-                                    placeholder="Click to select or type to search…" autocomplete="off">
-                            </div>
+                    if (!c) {
+                        if (billingBox) billingBox.innerHTML =
+                            `<div class="text-muted small">Select a company to view billing address.</div>`;
+                        if (shippingBox) shippingBox.innerHTML =
+                            `<div class="text-muted small">Select a company to view shipping address.</div>`;
+                        if (vatTreatmentLine) vatTreatmentLine.textContent = '';
+                        if (paymentTermsLine) paymentTermsLine.textContent = '—';
+                        return;
+                    }
 
-                            <div class="nw-picked">
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control pickedText" readonly value="">
-                                    <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
-                                </div>
-                            </div>
+                    const billing = c.billing_address || c.address || '';
+                    const shipping = c.shipping_address || c.address || '';
 
-                            <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
-                            <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+                    if (billingBox) billingBox.innerHTML = billing.trim() ? nl2br(billing.trim()) :
+                        `<span class="text-muted small">—</span>`;
+                    if (shippingBox) shippingBox.innerHTML = shipping.trim() ? nl2br(shipping.trim()) :
+                        `<span class="text-muted small">—</span>`;
 
-                            <div class="nw-desc-wrap">
-                                <textarea class="form-control form-control-sm itemDesc"
-                                    name="items[${idx}][description]" rows="2"
-                                    placeholder="Description…">${String(prefill.description ?? '')}</textarea>
+                    const vt = c.vat_treatment || '';
+                    const vn = c.vat_number || '';
+                    if (vatTreatmentLine) vatTreatmentLine.textContent = (vt || vn) ?
+                        `VAT: ${vt}${vn ? ' • ' + vn : ''}` : '';
+                    if (paymentTermsLine) paymentTermsLine.textContent = (c.payment_terms || '').trim() ? c
+                        .payment_terms : '—';
+                }
+
+                companySelect?.addEventListener('change', refreshCompanyBlocks);
+                refreshCompanyBlocks();
+            })();
+
+            // ============================
+            // ITEMS picker
+            // ============================
+            (function initQuoteItems() {
+                const itemsBody = document.getElementById('itemsBody');
+                const addBtn = document.getElementById('addItemBtn');
+                const defaultTaxType = document.getElementById('defaultTaxType');
+                if (!itemsBody) return;
+
+                const PRODUCTS = Object.values(window.NW_PRODUCTS || {});
+                const TAXTYPES = window.NW_TAXTYPES || {};
+
+                function money(n) {
+                    const x = Number(n || 0);
+                    return x.toLocaleString('en-ZA', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                }
+
+                function clamp(n, min, max) {
+                    const x = Number(n);
+                    if (Number.isNaN(x)) return min;
+                    return Math.min(max, Math.max(min, x));
+                }
+
+                function normalizeRate(p) {
+                    return (p.unit_rate ?? p.unit_price ?? p.price ?? p.selling_price ?? 0);
+                }
+
+                function taxOptions(selectedId) {
+                    let html = `<option value="">—</option>`;
+                    Object.values(TAXTYPES).forEach(t => {
+                        const sel = String(t.id) === String(selectedId) ? 'selected' : '';
+                        html +=
+                            `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
+                    });
+                    return html;
+                }
+
+                // dropdown
+                const globalSuggest = document.createElement('div');
+                globalSuggest.className = 'nw-suggest';
+                document.body.appendChild(globalSuggest);
+
+                let activeRow = null;
+                let activeInput = null;
+
+                function openSuggest(inputEl, rowEl, html) {
+                    const r = inputEl.getBoundingClientRect();
+                    globalSuggest.innerHTML = html;
+                    globalSuggest.style.left = r.left + 'px';
+                    globalSuggest.style.top = (r.bottom + 6) + 'px';
+                    globalSuggest.style.width = r.width + 'px';
+                    globalSuggest.style.display = 'block';
+                    activeRow = rowEl;
+                    activeInput = inputEl;
+                }
+
+                function closeSuggest() {
+                    globalSuggest.style.display = 'none';
+                    globalSuggest.innerHTML = '';
+                    activeRow = null;
+                    activeInput = null;
+                }
+
+                function repositionSuggest() {
+                    if (globalSuggest.style.display !== 'block') return;
+                    if (!activeInput) return;
+
+                    const r = activeInput.getBoundingClientRect();
+                    globalSuggest.style.left = r.left + 'px';
+                    globalSuggest.style.top = (r.bottom + 6) + 'px';
+                    globalSuggest.style.width = r.width + 'px';
+
+                    if (r.bottom < 0 || r.top > window.innerHeight) closeSuggest();
+                }
+                globalSuggest.addEventListener('wheel', (e) => e.stopPropagation(), {
+                    passive: true
+                });
+                window.addEventListener('scroll', repositionSuggest, true);
+                window.addEventListener('resize', repositionSuggest);
+
+                document.addEventListener('click', (e) => {
+                    if (e.target.closest('.nw-picker')) return;
+                    if (e.target.closest('.nw-suggest')) return;
+                    closeSuggest();
+                });
+
+                function scoreMatch(p, term) {
+                    const t = (term || '').toLowerCase().trim();
+                    if (!t) return -1;
+
+                    const sku = String(p.sku || '').toLowerCase();
+                    const name = String(p.name || '').toLowerCase();
+                    const desc = String(p.description || '').toLowerCase();
+
+                    let score = -1;
+                    if (sku.startsWith(t)) score = Math.max(score, 120);
+                    if (name.startsWith(t)) score = Math.max(score, 110);
+                    if (sku.includes(t)) score = Math.max(score, 90);
+                    if (name.includes(t)) score = Math.max(score, 80);
+                    if (desc.includes(t)) score = Math.max(score, 50);
+                    return score;
+                }
+
+                function findMatches(term, limit = 12) {
+                    const t = (term || '').trim();
+                    if (t.length < 1) return [];
+                    const ranked = [];
+                    for (const p of PRODUCTS) {
+                        const s = scoreMatch(p, t);
+                        if (s >= 0) ranked.push({
+                            p,
+                            s
+                        });
+                    }
+                    ranked.sort((a, b) => b.s - a.s);
+                    return ranked.slice(0, limit).map(x => x.p);
+                }
+
+                function buildSuggestActionsHtml() {
+                    if (!window.NW_CAN_CREATE_PRODUCT) return '';
+                    return `
+                        <div class="nw-opt nw-opt-action" data-action="create-product">
+                            <div class="nw-name">+ Create new product</div>
+                            <div class="nw-sub">
+                                <span>Add without leaving this quote</span>
+                                <span class="nw-right">Enter ↵</span>
                             </div>
                         </div>
-                    </td>
+                    `;
+                }
 
-                    <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
-
-                    <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                        name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
-
-                    <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                        name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
-
-                    <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                        name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
-
-                    <td>
-                        <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
-                            ${taxOptions(defaultTaxId)}
-                        </select>
-                    </td>
-
-                    <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
-                    <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
-
-                    <td class="text-end">
-                        <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
-                    </td>
-                `;
-
-                itemsBody.appendChild(tr);
-
-                const input = tr.querySelector('.nw-search');
-
-                function renderDropdown(term) {
-                    const matches = findMatches(term, 12);
-
-                    if (!matches.length) {
-                        openSuggest(input, tr,
-                            `<div class="nw-opt"><div class="nw-sub">No matches</div></div>` +
+                function renderTopProducts(input, row) {
+                    const top = PRODUCTS.slice(0, 12);
+                    if (!top.length) {
+                        openSuggest(input, row,
+                            `<div class="nw-opt"><div class="nw-sub">No products</div></div>` +
                             buildSuggestActionsHtml());
                         return;
                     }
 
-                    const html = matches.map(p => {
-                        const rate = normalizeRate(p);
+                    const html = top.map(p => {
+                        const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
+                            .filter(Boolean).join(' • ');
                         return `
                             <div class="nw-opt" data-id="${p.id}">
                                 <div class="nw-name">${p.name ?? '—'}</div>
-                                <div class="nw-sub"><span>SKU: ${p.sku ?? '—'} • Rate: R${money(rate)}</span></div>
+                                <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
                             </div>
                         `;
                     }).join('');
 
-                    openSuggest(input, tr, html + buildSuggestActionsHtml());
+                    openSuggest(input, row, html + buildSuggestActionsHtml());
                 }
 
-                input.addEventListener('click', () => {
-                    if (!(input.value || '').trim()) return renderTopProducts(input, tr);
-                    renderDropdown(input.value);
-                });
-
-                input.addEventListener('focus', () => {
-                    if (!(input.value || '').trim()) return;
-                    renderDropdown(input.value);
-                });
-
-                input.addEventListener('input', () => renderDropdown(input.value));
-
-                if (prefill.product_id) {
-                    applyProduct(tr, prefill.product_id);
-                    setSelectedUI(tr, true);
-                } else {
-                    setSelectedUI(tr, false);
+                function setSelectedUI(row, selected) {
+                    const a = row.querySelector('.nw-search-wrap');
+                    const b = row.querySelector('.nw-picked');
+                    const c = row.querySelector('.nw-desc-wrap');
+                    if (a) a.style.display = selected ? 'none' : 'block';
+                    if (b) b.style.display = selected ? 'block' : 'none';
+                    if (c) c.style.display = selected ? 'block' : 'none';
                 }
 
-                recalc();
-            }
+                function applyProduct(row, productId) {
+                    const map = window.NW_PRODUCTS || {};
+                    const p = map[productId] || map[String(productId)];
+                    if (!p) return;
 
-            // Boot rows
-            const old = window.NW_OLD_ITEMS || [];
-            if (old.length) old.forEach(it => addRow(it));
-            else addRow();
+                    row.querySelector('.product_id').value = p.id;
+                    row.querySelector('.sku').value = p.sku ?? '';
+                    row.querySelector('.pickedText').value = `${p.name ?? ''}${p.sku ? ' • ' + p.sku : ''}`;
+                    row.querySelector('.itemName').value = p.name ?? '';
+                    row.querySelector('.itemDesc').value = p.description ?? '';
+                    row.querySelector('.unit_price').value = normalizeRate(p);
 
-            // row events
-            itemsBody.addEventListener('change', (e) => {
-                const row = e.target.closest('.quote-item-row');
-                if (!row) return;
-                if (e.target.classList.contains('taxType')) recalc();
-            });
-
-            itemsBody.addEventListener('input', (e) => {
-                if (e.target.classList.contains('qty') ||
-                    e.target.classList.contains('unit_price') ||
-                    e.target.classList.contains('discount_pct')) recalc();
-            });
-
-            itemsBody.addEventListener('click', (e) => {
-                const row = e.target.closest('.quote-item-row');
-                if (!row) return;
-
-                if (e.target.classList.contains('clearProductBtn')) return clearProduct(row);
-
-                if (e.target.classList.contains('removeItemBtn')) {
-                    if (itemsBody.querySelectorAll('.quote-item-row').length <= 1) {
-                        clearProduct(row);
-                        row.querySelector('.qty').value = 1;
-                        row.querySelector('.unit_price').value = 0;
-                        row.querySelector('.discount_pct').value = 0;
-                        row.querySelector('.taxType').value = defaultTaxType?.value || '';
-                        recalc();
-                        return;
-                    }
-                    row.remove();
-                    reindex();
+                    setSelectedUI(row, true);
                     recalc();
                 }
-            });
 
-            addBtn?.addEventListener('click', () => addRow());
+                function clearProduct(row) {
+                    row.querySelector('.product_id').value = '';
+                    row.querySelector('.sku').value = '';
+                    row.querySelector('.pickedText').value = '';
+                    row.querySelector('.itemName').value = '';
+                    row.querySelector('.itemDesc').value = '';
+                    row.querySelector('.unit_price').value = 0;
 
-            defaultTaxType?.addEventListener('change', () => {
-                itemsBody.querySelectorAll('.quote-item-row .taxType').forEach(sel => {
-                    if (!sel.value) sel.value = defaultTaxType.value;
+                    const inp = row.querySelector('.nw-search');
+                    if (inp) inp.value = '';
+                    setSelectedUI(row, false);
+                    closeSuggest();
+                    row.querySelector('.nw-search')?.focus();
+                    recalc();
+                }
+
+                function recalc() {
+                    let subtotal = 0,
+                        discountTotal = 0,
+                        taxTotal = 0;
+
+                    itemsBody.querySelectorAll('.quote-item-row').forEach(row => {
+                        const qty = parseFloat(row.querySelector('.qty')?.value || '0');
+                        const rate = parseFloat(row.querySelector('.unit_price')?.value || '0');
+
+                        const gross = qty * rate;
+                        const discPct = clamp(row.querySelector('.discount_pct')?.value || 0, 0, 100);
+                        const discAmt = gross * (discPct / 100);
+                        const net = gross - discAmt;
+
+                        const taxTypeId = row.querySelector('.taxType')?.value || '';
+                        const t = (window.NW_TAXTYPES || {})[taxTypeId] || (window.NW_TAXTYPES || {})[
+                            String(taxTypeId)];
+                        const vatRate = t ? parseFloat(t.rate || 0) : 0;
+
+                        const vat = net * (vatRate / 100);
+                        const incl = net + vat;
+
+                        subtotal += gross;
+                        discountTotal += discAmt;
+                        taxTotal += vat;
+
+                        row.querySelector('.lineExcl').textContent = money(net);
+                        row.querySelector('.lineIncl').textContent = money(incl);
+                    });
+
+                    document.getElementById('subtotal').textContent = money(subtotal);
+                    document.getElementById('discountTotal').textContent = money(discountTotal);
+                    document.getElementById('taxAmount').textContent = money(taxTotal);
+                    document.getElementById('grandTotal').textContent = money((subtotal - discountTotal) +
+                        taxTotal);
+                }
+
+                function reindex() {
+                    itemsBody.querySelectorAll('.quote-item-row').forEach((row, idx) => {
+                        row.querySelectorAll('input,select,textarea').forEach(el => {
+                            if (!el.name) return;
+                            el.name = el.name.replace(/items\[\d+\]/, `items[${idx}]`);
+                        });
+                    });
+                }
+
+                // ✅ dropdown select (pointerdown capture)
+                function handleSuggestSelect(e) {
+                    const opt = e.target.closest('.nw-opt');
+                    if (!opt) return;
+                    if (e.button != null && e.button !== 0) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const action = opt.getAttribute('data-action');
+                    if (action === 'create-product') {
+                        const row = activeRow;
+                        const name = (activeInput?.value || '').trim();
+                        const taxTypeId = row?.querySelector('.taxType')?.value || (defaultTaxType?.value ||
+                        '');
+
+                        closeSuggest();
+
+                        window.NWQuickProduct?.open({
+                            row,
+                            name,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                            }
+                        });
+                        return;
+                    }
+
+                    const id = opt.getAttribute('data-id');
+                    if (id && activeRow) {
+                        applyProduct(activeRow, id);
+                        closeSuggest();
+                    }
+                }
+                globalSuggest.addEventListener('pointerdown', handleSuggestSelect, true);
+
+                function addRow(prefill = {}) {
+                    const idx = itemsBody.querySelectorAll('.quote-item-row').length;
+                    const defaultTaxId = prefill.tax_type_id ?? (defaultTaxType?.value || '');
+
+                    const tr = document.createElement('tr');
+                    tr.className = 'quote-item-row';
+
+                    tr.innerHTML = `
+                        <td>
+                            <div class="nw-picker">
+                                <div class="nw-search-wrap">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control nw-search"
+                                            placeholder="Click to select or type to search…" autocomplete="off">
+                                        <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                                    </div>
+                                </div>
+
+                                <div class="nw-picked">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control pickedText" readonly value="">
+                                        <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
+                                    </div>
+                                </div>
+
+                                <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
+                                <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+
+                                <div class="nw-desc-wrap">
+                                    <textarea class="form-control form-control-sm itemDesc"
+                                        name="items[${idx}][description]" rows="2"
+                                        placeholder="Description…">${String(prefill.description ?? '')}</textarea>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
+
+                        <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
+                            name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+
+                        <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
+                            name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+
+                        <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
+                            name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
+
+                        <td>
+                            <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
+                                ${taxOptions(defaultTaxId)}
+                            </select>
+                        </td>
+
+                        <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
+                        <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
+
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
+                        </td>
+                    `;
+
+                    itemsBody.appendChild(tr);
+
+                    const input = tr.querySelector('.nw-search');
+
+                    function renderDropdown(term) {
+                        const matches = findMatches(term, 12);
+                        if (!matches.length) {
+                            openSuggest(input, tr,
+                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>` +
+                                buildSuggestActionsHtml());
+                            return;
+                        }
+
+                        const html = matches.map(p => {
+                            const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
+                                .filter(Boolean).join(' • ');
+                            return `
+                                <div class="nw-opt" data-id="${p.id}">
+                                    <div class="nw-name">${p.name ?? '—'}</div>
+                                    <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                                </div>
+                            `;
+                        }).join('');
+
+                        openSuggest(input, tr, html + buildSuggestActionsHtml());
+                    }
+
+                    input.addEventListener('click', () => {
+                        if (!(input.value || '').trim()) return renderTopProducts(input, tr);
+                        renderDropdown(input.value);
+                    });
+                    input.addEventListener('focus', () => {
+                        if (!(input.value || '').trim()) return;
+                        renderDropdown(input.value);
+                    });
+                    input.addEventListener('input', () => renderDropdown(input.value));
+
+                    // + button opens modal
+                    tr.querySelector('.nw-add-product')?.addEventListener('click', () => {
+                        const name = (input.value || '').trim();
+                        const taxTypeId = tr.querySelector('.taxType')?.value || (defaultTaxType
+                            ?.value || '');
+                        window.NWQuickProduct?.open({
+                            row: tr,
+                            name,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                                closeSuggest();
+                            }
+                        });
+                    });
+
+                    if (prefill.product_id) {
+                        applyProduct(tr, prefill.product_id);
+                        setSelectedUI(tr, true);
+                    } else {
+                        setSelectedUI(tr, false);
+                    }
+
+                    recalc();
+                }
+
+                // Boot rows
+                const old = window.NW_OLD_ITEMS || [];
+                if (old.length) old.forEach(it => addRow(it));
+                else addRow();
+
+                itemsBody.addEventListener('change', (e) => {
+                    const row = e.target.closest('.quote-item-row');
+                    if (!row) return;
+                    if (e.target.classList.contains('taxType')) recalc();
                 });
-                recalc();
-            });
 
-            recalc();
-        })();
-    });
-</script>
+                itemsBody.addEventListener('input', (e) => {
+                    if (e.target.classList.contains('qty') ||
+                        e.target.classList.contains('unit_price') ||
+                        e.target.classList.contains('discount_pct')) recalc();
+                });
+
+                itemsBody.addEventListener('click', (e) => {
+                    const row = e.target.closest('.quote-item-row');
+                    if (!row) return;
+
+                    if (e.target.classList.contains('clearProductBtn')) return clearProduct(row);
+
+                    if (e.target.classList.contains('removeItemBtn')) {
+                        if (itemsBody.querySelectorAll('.quote-item-row').length <= 1) {
+                            clearProduct(row);
+                            row.querySelector('.qty').value = 1;
+                            row.querySelector('.unit_price').value = 0;
+                            row.querySelector('.discount_pct').value = 0;
+                            row.querySelector('.taxType').value = defaultTaxType?.value || '';
+                            recalc();
+                            return;
+                        }
+                        row.remove();
+                        reindex();
+                        recalc();
+                    }
+                });
+
+                addBtn?.addEventListener('click', () => addRow());
+
+                defaultTaxType?.addEventListener('change', () => {
+                    itemsBody.querySelectorAll('.quote-item-row .taxType').forEach(sel => {
+                        if (!sel.value) sel.value = defaultTaxType.value;
+                    });
+                    recalc();
+                });
+
+                recalc();
+            })();
+        });
+    </script>
+@endpush

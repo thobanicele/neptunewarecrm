@@ -2,7 +2,6 @@
 
 @section('content')
     @php
-
         $seedItems = old('items');
 
         if (!$seedItems) {
@@ -92,7 +91,6 @@ $companiesJsonLocal = ($companies ?? collect())
                         <div class="col-12 col-lg-6">
                             @include('tenant.partials.transaction-header-brand', [
                                 'tenant' => $tenant,
-                                // optional overrides:
                                 'logoHeight' => 56,
                                 'logoMaxWidth' => 180,
                                 'showAddress' => true,
@@ -247,7 +245,7 @@ $companiesJsonLocal = ($companies ?? collect())
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div class="fw-semibold">Items</div>
-                    <div class="text-muted small">Type to search products. Description only shows after selection.</div>
+                    <div class="text-muted small">Click ITEM to pick from dropdown. Type to search by SKU or name.</div>
                 </div>
 
                 <div class="card-body">
@@ -316,7 +314,8 @@ $companiesJsonLocal = ($companies ?? collect())
                                     <hr class="my-3">
                                     <div class="fw-semibold mb-1">Bank Details</div>
                                     <div class="text-muted small" style="white-space: pre-wrap;">
-                                        {{ $tenant->bank_details }}</div>
+                                        {{ $tenant->bank_details }}
+                                    </div>
                                 @endif
                             </div>
                         </div>
@@ -333,6 +332,13 @@ $companiesJsonLocal = ($companies ?? collect())
 
         </form>
     </div>
+
+    {{-- ✅ Reusable Quick Add Product Modal (supports Brand + Category) --}}
+    @include('tenant.products.partials.quick_add_modal', [
+        'taxTypes' => $taxTypes ?? collect(),
+        'brands' => $brands ?? collect(),
+        'categories' => $categories ?? collect(),
+    ])
 @endsection
 
 @push('styles')
@@ -383,13 +389,13 @@ $companiesJsonLocal = ($companies ?? collect())
             border: 1px solid rgba(0, 0, 0, .125);
             border-radius: .5rem;
             box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
-            max-height: 260px;
+            max-height: 280px;
             overflow: auto;
             display: none;
         }
 
         .nw-suggest .nw-opt {
-            padding: .45rem .6rem;
+            padding: .55rem .65rem;
             cursor: pointer;
             border-bottom: 1px solid rgba(0, 0, 0, .06);
         }
@@ -404,7 +410,7 @@ $companiesJsonLocal = ($companies ?? collect())
         }
 
         .nw-opt .nw-name {
-            font-weight: 600;
+            font-weight: 700;
             line-height: 1.2;
         }
 
@@ -412,23 +418,50 @@ $companiesJsonLocal = ($companies ?? collect())
             font-size: .72rem;
             color: #6c757d;
             line-height: 1.2;
-            margin-top: .1rem;
+            margin-top: .2rem;
+            display: flex;
+            justify-content: space-between;
+            gap: .6rem;
+        }
+
+        .nw-opt .nw-right {
+            white-space: nowrap;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action {
+            position: sticky;
+            bottom: 0;
+            background: var(--bs-body-bg);
+            border-top: 1px solid rgba(0, 0, 0, .08);
+            border-bottom: 0;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action:hover {
+            background: rgba(13, 110, 253, .06);
+        }
+
+        /* small + button sizing */
+        .nw-search-wrap .btn {
+            padding: .18rem .45rem;
+            line-height: 1;
+            font-size: .78rem;
         }
     </style>
 @endpush
 
 @push('scripts')
+    {{-- ✅ Reusable Quick Add Product scripts partial (ONLY SOURCE OF TRUTH) --}}
+    @include('tenant.products.partials.quick_add_modal_scripts')
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
 
+            // Global Data
             window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
             window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
-
-            // Prefer controller-provided companiesJson; fallback to companies table fields
             window.NW_COMPANIES = @json($companiesJson ?? $companiesJsonLocal);
-
-            // Seed rows from server-prepared $seedItems
             window.NW_OLD_ITEMS = @json($seedItems);
+            window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
 
             (function() {
 
@@ -499,6 +532,7 @@ $companiesJsonLocal = ($companies ?? collect())
                     if (paymentTermsLine) paymentTermsLine.textContent = (c.payment_terms || '').trim() ? c
                         .payment_terms : '—';
                 }
+
                 companySelect?.addEventListener('change', refreshCompanyBlocks);
                 refreshCompanyBlocks();
 
@@ -513,6 +547,7 @@ $companiesJsonLocal = ($companies ?? collect())
                 document.body.appendChild(globalSuggest);
 
                 let activeRow = null;
+                let activeInput = null;
 
                 function openSuggest(inputEl, rowEl, html) {
                     const r = inputEl.getBoundingClientRect();
@@ -522,22 +557,39 @@ $companiesJsonLocal = ($companies ?? collect())
                     globalSuggest.style.width = r.width + 'px';
                     globalSuggest.style.display = 'block';
                     activeRow = rowEl;
+                    activeInput = inputEl;
                 }
 
                 function closeSuggest() {
                     globalSuggest.style.display = 'none';
                     globalSuggest.innerHTML = '';
                     activeRow = null;
+                    activeInput = null;
                 }
 
-                window.addEventListener('scroll', () => {
-                    if (globalSuggest.style.display === 'block') closeSuggest();
-                }, true);
+                // ✅ Reposition dropdown on scroll/resize (do NOT close)
+                function repositionSuggest() {
+                    if (globalSuggest.style.display !== 'block') return;
+                    if (!activeInput) return;
 
-                window.addEventListener('resize', () => {
-                    if (globalSuggest.style.display === 'block') closeSuggest();
+                    const r = activeInput.getBoundingClientRect();
+                    globalSuggest.style.left = r.left + 'px';
+                    globalSuggest.style.top = (r.bottom + 6) + 'px';
+                    globalSuggest.style.width = r.width + 'px';
+
+                    if (r.bottom < 0 || r.top > window.innerHeight) closeSuggest();
+                }
+
+                globalSuggest.addEventListener('wheel', (e) => {
+                    e.stopPropagation();
+                }, {
+                    passive: true
                 });
 
+                window.addEventListener('scroll', repositionSuggest, true);
+                window.addEventListener('resize', repositionSuggest);
+
+                // Close when clicking outside
                 document.addEventListener('click', (e) => {
                     if (e.target.closest('.nw-picker')) return;
                     if (e.target.closest('.nw-suggest')) return;
@@ -586,6 +638,43 @@ $companiesJsonLocal = ($companies ?? collect())
                             `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
                     });
                     return html;
+                }
+
+                function buildSuggestActionsHtml() {
+                    if (!window.NW_CAN_CREATE_PRODUCT) return '';
+                    return `
+                <div class="nw-opt nw-opt-action" data-action="create-product">
+                    <div class="nw-name">+ Create new product</div>
+                    <div class="nw-sub">
+                        <span>Add without leaving this quote</span>
+                        <span class="nw-right">Enter ↵</span>
+                    </div>
+                </div>
+            `;
+                }
+
+                function renderTopProducts(inputEl, rowEl) {
+                    const top = PRODUCTS.slice(0, 12);
+
+                    if (!top.length) {
+                        openSuggest(inputEl, rowEl,
+                            `<div class="nw-opt"><div class="nw-sub">No products</div></div>` +
+                            buildSuggestActionsHtml());
+                        return;
+                    }
+
+                    const html = top.map(p => {
+                        const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
+                            .filter(Boolean).join(' • ');
+                        return `
+                    <div class="nw-opt" data-id="${p.id}">
+                        <div class="nw-name">${p.name ?? '—'}</div>
+                        <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                    </div>
+                `;
+                    }).join('');
+
+                    openSuggest(inputEl, rowEl, html + buildSuggestActionsHtml());
                 }
 
                 function setSelectedUI(row, selected) {
@@ -694,9 +783,11 @@ $companiesJsonLocal = ($companies ?? collect())
                 <td>
                     <div class="nw-picker">
                         <div class="nw-search-wrap">
-                            <input type="text" class="form-control form-control-sm nw-search"
-                                   placeholder="Search SKU or name…"
-                                   autocomplete="off">
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control nw-search"
+                                    placeholder="Click to select or type to search…" autocomplete="off">
+                                <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                            </div>
                         </div>
 
                         <div class="nw-picked">
@@ -711,8 +802,8 @@ $companiesJsonLocal = ($companies ?? collect())
 
                         <div class="nw-desc-wrap">
                             <textarea class="form-control form-control-sm itemDesc"
-                                      name="items[${idx}][description]" rows="2"
-                                      placeholder="Description…">${String(prefill.description ?? '')}</textarea>
+                                name="items[${idx}][description]" rows="2"
+                                placeholder="Description…">${String(prefill.description ?? '')}</textarea>
                         </div>
                     </div>
                 </td>
@@ -720,13 +811,13 @@ $companiesJsonLocal = ($companies ?? collect())
                 <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
 
                 <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                           name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+                    name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
 
                 <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                           name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+                    name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
 
                 <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                           name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
+                    name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
 
                 <td>
                     <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
@@ -751,13 +842,15 @@ $companiesJsonLocal = ($companies ?? collect())
 
                         if (!matches.length) {
                             openSuggest(input, tr,
-                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>`);
+                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>` +
+                                buildSuggestActionsHtml());
                             return;
                         }
 
                         const html = matches.map(p => {
                             const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                                 .filter(Boolean).join(' • ');
+
                             return `
                         <div class="nw-opt" data-id="${p.id}">
                             <div class="nw-name">${p.name ?? '—'}</div>
@@ -766,11 +859,17 @@ $companiesJsonLocal = ($companies ?? collect())
                     `;
                         }).join('');
 
-                        openSuggest(input, tr, html);
+                        openSuggest(input, tr, html + buildSuggestActionsHtml());
                     }
 
+                    input.addEventListener('click', () => {
+                        if (!(input.value || '').trim()) return renderTopProducts(input, tr);
+                        renderDropdown(input.value);
+                    });
+
                     input.addEventListener('focus', () => {
-                        if ((input.value || '').trim()) renderDropdown(input.value);
+                        if (!(input.value || '').trim()) return;
+                        renderDropdown(input.value);
                     });
 
                     input.addEventListener('input', () => renderDropdown(input.value));
@@ -778,7 +877,8 @@ $companiesJsonLocal = ($companies ?? collect())
                     input.addEventListener('keydown', (e) => {
                         if (globalSuggest.style.display !== 'block') return;
 
-                        const opts = Array.from(globalSuggest.querySelectorAll('.nw-opt[data-id]'));
+                        const opts = Array.from(globalSuggest.querySelectorAll(
+                            '.nw-opt[data-id], .nw-opt[data-action]'));
                         if (!opts.length) return;
 
                         let activeIndex = opts.findIndex(x => x.classList.contains('active'));
@@ -791,8 +891,49 @@ $companiesJsonLocal = ($companies ?? collect())
                             activeIndex = Math.max(0, activeIndex - 1);
                         } else if (e.key === 'Enter') {
                             e.preventDefault();
-                            const chosen = opts[Math.max(0, activeIndex)];
-                            if (chosen) applyProduct(tr, chosen.getAttribute('data-id'));
+
+                            const chosen = opts[Math.max(0, activeIndex)] || opts[0];
+                            if (!chosen) return;
+
+                            const action = chosen.getAttribute('data-action');
+                            if (action === 'create-product') {
+
+                                // ✅ capture these BEFORE closeSuggest() clears them
+                                const row = activeRow;
+                                const name = (activeInput?.value || '').trim();
+                                const taxTypeId = row?.querySelector('.taxType')?.value || (
+                                    defaultTaxType?.value || '');
+
+                                closeSuggest();
+
+                                if (!window.NWQuickProduct || typeof window.NWQuickProduct.open !==
+                                    'function') {
+                                    console.error(
+                                        '[NW] NWQuickProduct missing. Ensure quick_add_modal_scripts is included before this picker script.'
+                                        );
+                                    return;
+                                }
+
+                                if (!row) {
+                                    console.warn('[NW] create-product clicked but activeRow is null');
+                                    return;
+                                }
+
+                                window.NWQuickProduct.open({
+                                    row: row,
+                                    name: name,
+                                    tax_type_id: taxTypeId,
+                                    afterCreate: (product, r) => {
+                                        PRODUCTS.push(product);
+                                        applyProduct(r, product.id);
+                                    }
+                                });
+
+                                return;
+                            }
+
+                            const id = chosen.getAttribute('data-id');
+                            if (id) applyProduct(tr, id);
                             closeSuggest();
                             return;
                         } else if (e.key === 'Escape') {
@@ -809,7 +950,6 @@ $companiesJsonLocal = ($companies ?? collect())
                         });
                     });
 
-                    // Prefill
                     if (prefill.product_id) {
                         applyProduct(tr, prefill.product_id);
 
@@ -830,15 +970,64 @@ $companiesJsonLocal = ($companies ?? collect())
                     recalc();
                 }
 
-                globalSuggest.addEventListener('mousedown', (e) => {
-                    const opt = e.target.closest('.nw-opt[data-id]');
+                // ✅ Dropdown selection handler (CAPTURE + pointerdown only)
+                function handleSuggestSelect(e) {
+                    const opt = e.target.closest('.nw-opt');
                     if (!opt) return;
-                    e.preventDefault();
-                    if (!activeRow) return;
-                    applyProduct(activeRow, opt.getAttribute('data-id'));
-                    closeSuggest();
-                });
 
+                    // Only primary button/touch
+                    if (e.button != null && e.button !== 0) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const action = opt.getAttribute('data-action');
+                    if (action === 'create-product') {
+
+                        // ✅ capture these BEFORE closeSuggest() clears them
+                        const row = activeRow;
+                        const name = (activeInput?.value || '').trim();
+                        const taxTypeId = row?.querySelector('.taxType')?.value || (defaultTaxType?.value ||
+                            '');
+
+                        closeSuggest();
+
+                        if (!window.NWQuickProduct || typeof window.NWQuickProduct.open !== 'function') {
+                            console.error(
+                                '[NW] NWQuickProduct missing. Ensure quick_add_modal_scripts is included before this picker script.'
+                            );
+                            return;
+                        }
+
+                        if (!row) {
+                            console.warn('[NW] create-product clicked but activeRow is null');
+                            return;
+                        }
+
+                        window.NWQuickProduct.open({
+                            row: row,
+                            name: name,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                            }
+                        });
+
+                        return;
+                    }
+
+                    const id = opt.getAttribute('data-id');
+                    if (id && activeRow) {
+                        applyProduct(activeRow, id);
+                        closeSuggest();
+                    }
+                }
+
+                // IMPORTANT: capture=true so it beats document click handlers
+                globalSuggest.addEventListener('pointerdown', handleSuggestSelect, true);
+
+                // Boot rows
                 const old = window.NW_OLD_ITEMS || [];
                 if (old.length) old.forEach(it => addRow(it));
                 else addRow();
@@ -850,16 +1039,41 @@ $companiesJsonLocal = ($companies ?? collect())
                 });
 
                 itemsBody.addEventListener('input', (e) => {
-                    if (
-                        e.target.classList.contains('qty') ||
+                    if (e.target.classList.contains('qty') ||
                         e.target.classList.contains('unit_price') ||
-                        e.target.classList.contains('discount_pct')
-                    ) recalc();
+                        e.target.classList.contains('discount_pct')) recalc();
                 });
 
                 itemsBody.addEventListener('click', (e) => {
                     const row = e.target.closest('.quote-item-row');
                     if (!row) return;
+
+                    const addBtnClick = e.target.closest('.nw-add-product');
+                    if (addBtnClick) {
+                        const term = (row.querySelector('.nw-search')?.value || '').trim();
+                        const taxTypeId = row.querySelector('.taxType')?.value || (defaultTaxType
+                            ?.value || '');
+
+                        if (!window.NWQuickProduct || typeof window.NWQuickProduct.open !==
+                            'function') {
+                            console.error(
+                                '[NW] NWQuickProduct missing. Ensure quick_add_modal_scripts is included before this picker script.'
+                            );
+                            return;
+                        }
+
+                        window.NWQuickProduct.open({
+                            row,
+                            name: term,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                                closeSuggest();
+                            }
+                        });
+                        return;
+                    }
 
                     if (e.target.classList.contains('clearProductBtn')) {
                         clearProduct(row);

@@ -33,7 +33,6 @@
                         <div class="col-12 col-lg-6">
                             @include('tenant.partials.transaction-header-brand', [
                                 'tenant' => $tenant,
-                                // optional overrides:
                                 'logoHeight' => 56,
                                 'logoMaxWidth' => 180,
                                 'showAddress' => true,
@@ -55,7 +54,8 @@
                                         <select class="form-select" name="status">
                                             @foreach (['draft', 'issued'] as $s)
                                                 <option value="{{ $s }}" @selected(old('status', 'issued') === $s)>
-                                                    {{ strtoupper($s) }}</option>
+                                                    {{ strtoupper($s) }}
+                                                </option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -67,7 +67,6 @@
                                             placeholder="e.g. Returned goods / Pricing correction">
                                     </div>
 
-                                    {{-- Optional: apply to specific invoice (you said: auto-allocate + optional invoice dropdown) --}}
                                     <div class="col-12">
                                         <div class="text-muted small">Apply to specific invoice (optional)</div>
                                         <select class="form-select" name="apply_invoice_id" id="invoiceSelect">
@@ -79,7 +78,6 @@
                                                 </option>
                                             @endforeach
                                         </select>
-
                                         <div class="form-text">If you don’t pick one, backend auto-allocates to oldest
                                             unpaid invoices.</div>
                                     </div>
@@ -144,7 +142,7 @@
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div class="fw-semibold">Items</div>
-                    <div class="text-muted small">Type to search products. Description shows after selection.</div>
+                    <div class="text-muted small">Click ITEM to pick from dropdown. Type to search by SKU or name.</div>
                 </div>
 
                 <div class="card-body">
@@ -217,6 +215,13 @@
 
         </form>
     </div>
+
+    {{-- ✅ Reusable Quick Add Product Modal (supports Brand + Category if passed) --}}
+    @include('tenant.products.partials.quick_add_modal', [
+        'taxTypes' => $taxTypes ?? collect(),
+        'brands' => $brands ?? collect(),
+        'categories' => $categories ?? collect(),
+    ])
 @endsection
 
 @push('styles')
@@ -267,13 +272,13 @@
             border: 1px solid rgba(0, 0, 0, .125);
             border-radius: .5rem;
             box-shadow: 0 10px 24px rgba(0, 0, 0, .12);
-            max-height: 260px;
+            max-height: 280px;
             overflow: auto;
             display: none;
         }
 
         .nw-suggest .nw-opt {
-            padding: .45rem .6rem;
+            padding: .55rem .65rem;
             cursor: pointer;
             border-bottom: 1px solid rgba(0, 0, 0, .06);
         }
@@ -288,7 +293,7 @@
         }
 
         .nw-opt .nw-name {
-            font-weight: 600;
+            font-weight: 700;
             line-height: 1.2;
         }
 
@@ -296,22 +301,51 @@
             font-size: .72rem;
             color: #6c757d;
             line-height: 1.2;
-            margin-top: .1rem;
+            margin-top: .2rem;
+            display: flex;
+            justify-content: space-between;
+            gap: .6rem;
+        }
+
+        .nw-opt .nw-right {
+            white-space: nowrap;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action {
+            position: sticky;
+            bottom: 0;
+            background: var(--bs-body-bg);
+            border-top: 1px solid rgba(0, 0, 0, .08);
+            border-bottom: 0;
+        }
+
+        .nw-suggest .nw-opt.nw-opt-action:hover {
+            background: rgba(13, 110, 253, .06);
+        }
+
+        .nw-search-wrap .btn {
+            padding: .18rem .45rem;
+            line-height: 1;
+            font-size: .78rem;
         }
     </style>
 @endpush
 
 @push('scripts')
+    {{-- ✅ Reusable Quick Add Product scripts partial --}}
+    @include('tenant.products.partials.quick_add_modal_scripts')
+
     <script>
         // data
         window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
         window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
         window.NW_OLD_ITEMS = @json(old('items', []));
+        window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
 
         document.addEventListener('DOMContentLoaded', function() {
 
             // -----------------------------
-            // Contacts loader (same as quotes)
+            // Contacts loader
             // -----------------------------
             (function initContactsLoader() {
                 const companySelect = document.getElementById('companySelect');
@@ -319,11 +353,10 @@
                 if (!companySelect || !contactSelect) return;
 
                 const urlTemplate = companySelect.getAttribute('data-contacts-url-template') || '';
-                const prefillContactId = (companySelect.getAttribute('data-prefill-contact-id') || '')
-                    .toString();
+                const prefillContactId = String(companySelect.getAttribute('data-prefill-contact-id') || '');
 
                 function setContactOptions(contacts, selectedId) {
-                    const current = (selectedId || '').toString();
+                    const current = String(selectedId || '');
                     contactSelect.innerHTML = `<option value="">— none —</option>`;
                     (contacts || []).forEach(c => {
                         const id = String(c.id ?? '');
@@ -338,19 +371,13 @@
 
                 async function loadContactsForCompany(companyId, selectedId = '') {
                     const cid = String(companyId || '').trim();
-                    if (!cid) {
-                        setContactOptions([], '');
-                        return;
-                    }
+                    if (!cid) return setContactOptions([], '');
 
                     const url = urlTemplate.replace('__ID__', encodeURIComponent(cid));
-                    if (!url || url.includes('__ID__')) {
-                        setContactOptions([], '');
-                        return;
-                    }
+                    if (!url || url.includes('__ID__')) return setContactOptions([], '');
 
-                    const existingSelected = String(selectedId || contactSelect.value || prefillContactId ||
-                        '');
+                    const keepSelected = String(selectedId || contactSelect.value || prefillContactId ||
+                    '');
                     contactSelect.innerHTML = `<option value="">Loading…</option>`;
 
                     try {
@@ -363,7 +390,7 @@
                         const data = await res.json();
                         const contacts = Array.isArray(data.contacts) ? data.contacts : [];
 
-                        let finalSelected = existingSelected;
+                        let finalSelected = keepSelected;
                         if (finalSelected && !contacts.some(c => String(c.id) === String(finalSelected))) {
                             finalSelected = contacts[0]?.id ? String(contacts[0].id) : '';
                         }
@@ -374,19 +401,12 @@
                 }
 
                 companySelect.addEventListener('change', () => loadContactsForCompany(companySelect.value));
-                if (String(companySelect.value || '').trim()) {
-                    loadContactsForCompany(companySelect.value, prefillContactId);
-                }
+                if (String(companySelect.value || '').trim()) loadContactsForCompany(companySelect.value,
+                    prefillContactId);
             })();
 
-
             // -----------------------------
-            // Open invoices loader (apply_invoice_id dropdown)
-            // Requires:
-            //  - #invoiceSelect exists
-            //  - companySelect has:
-            //      data-open-invoices-url-template="/t/{tenant}/companies/__ID__/open-invoices"
-            //      data-prefill-invoice-id="..."
+            // Open invoices loader
             // -----------------------------
             (function initOpenInvoicesLoader() {
                 const companySelect = document.getElementById('companySelect');
@@ -394,8 +414,7 @@
                 if (!companySelect || !invoiceSelect) return;
 
                 const urlTemplate = companySelect.getAttribute('data-open-invoices-url-template') || '';
-                const prefillInvoiceId = (companySelect.getAttribute('data-prefill-invoice-id') || '')
-                    .toString();
+                const prefillInvoiceId = String(companySelect.getAttribute('data-prefill-invoice-id') || '');
 
                 function money(n) {
                     const x = Number(n || 0);
@@ -406,8 +425,7 @@
                 }
 
                 function setInvoiceOptions(invoices, selectedId = '') {
-                    const current = (selectedId || '').toString();
-
+                    const current = String(selectedId || '');
                     invoiceSelect.innerHTML = `<option value="">— auto allocate / not specified —</option>`;
 
                     if (!invoices || invoices.length === 0) {
@@ -422,8 +440,6 @@
                     invoices.forEach(inv => {
                         const id = String(inv.id ?? '');
                         const labelNo = inv.invoice_number || ('INV-' + id);
-
-                        // Expect API returns: total, outstanding (recommended)
                         const total = money(inv.total);
                         const due = money(inv.outstanding ?? inv.due ?? 0);
 
@@ -437,23 +453,13 @@
 
                 async function loadOpenInvoices(companyId, selectedId = '') {
                     const cid = String(companyId || '').trim();
-
-                    // No company → clear invoices
-                    if (!cid) {
-                        setInvoiceOptions([], '');
-                        return;
-                    }
+                    if (!cid) return setInvoiceOptions([], '');
 
                     const url = urlTemplate.replace('__ID__', encodeURIComponent(cid));
-                    if (!url || url.includes('__ID__')) {
-                        setInvoiceOptions([], '');
-                        return;
-                    }
+                    if (!url || url.includes('__ID__')) return setInvoiceOptions([], '');
 
-                    // Don’t carry wrong-company invoice selection
                     const keepSelected = String(selectedId || invoiceSelect.value || prefillInvoiceId ||
-                        '');
-
+                    '');
                     invoiceSelect.innerHTML = `<option value="">Loading…</option>`;
 
                     try {
@@ -470,7 +476,6 @@
                         if (finalSelected && !invoices.some(i => String(i.id) === String(finalSelected))) {
                             finalSelected = '';
                         }
-
                         setInvoiceOptions(invoices, finalSelected);
                     } catch (e) {
                         setInvoiceOptions([], '');
@@ -478,24 +483,18 @@
                 }
 
                 companySelect.addEventListener('change', () => loadOpenInvoices(companySelect.value, ''));
-
-                // Initial load
-                if (String(companySelect.value || '').trim()) {
-                    loadOpenInvoices(companySelect.value, prefillInvoiceId);
-                } else {
-                    setInvoiceOptions([], '');
-                }
+                if (String(companySelect.value || '').trim()) loadOpenInvoices(companySelect.value,
+                    prefillInvoiceId);
+                else setInvoiceOptions([], '');
             })();
 
-
             // -----------------------------
-            // Items / product search (same engine as Quote)
+            // Items / product picker + quick add
             // -----------------------------
             (function initItems() {
                 const itemsBody = document.getElementById('itemsBody');
                 const addBtn = document.getElementById('addItemBtn');
                 const defaultTaxType = document.getElementById('defaultTaxType');
-
                 if (!itemsBody) return;
 
                 const PRODUCTS = Object.values(window.NW_PRODUCTS || {});
@@ -519,12 +518,13 @@
                     return (p.unit_rate ?? p.unit_price ?? p.price ?? p.selling_price ?? 0);
                 }
 
-                // Global dropdown
+                // Global suggest dropdown
                 const globalSuggest = document.createElement('div');
                 globalSuggest.className = 'nw-suggest';
                 document.body.appendChild(globalSuggest);
 
                 let activeRow = null;
+                let activeInput = null;
 
                 function openSuggest(inputEl, rowEl, html) {
                     const r = inputEl.getBoundingClientRect();
@@ -534,13 +534,34 @@
                     globalSuggest.style.width = r.width + 'px';
                     globalSuggest.style.display = 'block';
                     activeRow = rowEl;
+                    activeInput = inputEl;
                 }
 
                 function closeSuggest() {
                     globalSuggest.style.display = 'none';
                     globalSuggest.innerHTML = '';
                     activeRow = null;
+                    activeInput = null;
                 }
+
+                // Reposition dropdown on scroll/resize (do NOT close)
+                function repositionSuggest() {
+                    if (globalSuggest.style.display !== 'block') return;
+                    if (!activeInput) return;
+
+                    const r = activeInput.getBoundingClientRect();
+                    globalSuggest.style.left = r.left + 'px';
+                    globalSuggest.style.top = (r.bottom + 6) + 'px';
+                    globalSuggest.style.width = r.width + 'px';
+
+                    if (r.bottom < 0 || r.top > window.innerHeight) closeSuggest();
+                }
+
+                globalSuggest.addEventListener('wheel', (e) => e.stopPropagation(), {
+                    passive: true
+                });
+                window.addEventListener('scroll', repositionSuggest, true);
+                window.addEventListener('resize', repositionSuggest);
 
                 document.addEventListener('click', (e) => {
                     if (e.target.closest('.nw-picker')) return;
@@ -551,6 +572,7 @@
                 function scoreMatch(p, term) {
                     const t = String(term || '').toLowerCase().trim();
                     if (!t) return -1;
+
                     const sku = String(p.sku || '').toLowerCase();
                     const name = String(p.name || '').toLowerCase();
                     const desc = String(p.description || '').toLowerCase();
@@ -589,10 +611,50 @@
                     return html;
                 }
 
+                function buildSuggestActionsHtml() {
+                    if (!window.NW_CAN_CREATE_PRODUCT) return '';
+                    return `
+                        <div class="nw-opt nw-opt-action" data-action="create-product">
+                            <div class="nw-name">+ Create new product</div>
+                            <div class="nw-sub">
+                                <span>Add without leaving this credit note</span>
+                                <span class="nw-right">Enter ↵</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                function renderTopProducts(inputEl, rowEl) {
+                    const top = PRODUCTS.slice(0, 12);
+                    if (!top.length) {
+                        openSuggest(inputEl, rowEl,
+                            `<div class="nw-opt"><div class="nw-sub">No products</div></div>` +
+                            buildSuggestActionsHtml()
+                        );
+                        return;
+                    }
+
+                    const html = top.map(p => {
+                        const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
+                            .filter(Boolean).join(' • ');
+                        return `
+                            <div class="nw-opt" data-id="${p.id}">
+                                <div class="nw-name">${p.name ?? '—'}</div>
+                                <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    openSuggest(inputEl, rowEl, html + buildSuggestActionsHtml());
+                }
+
                 function setSelectedUI(row, selected) {
-                    row.querySelector('.nw-search-wrap').style.display = selected ? 'none' : 'block';
-                    row.querySelector('.nw-picked').style.display = selected ? 'block' : 'none';
-                    row.querySelector('.nw-desc-wrap').style.display = selected ? 'block' : 'none';
+                    const a = row.querySelector('.nw-search-wrap');
+                    const b = row.querySelector('.nw-picked');
+                    const c = row.querySelector('.nw-desc-wrap');
+                    if (a) a.style.display = selected ? 'none' : 'block';
+                    if (b) b.style.display = selected ? 'block' : 'none';
+                    if (c) c.style.display = selected ? 'block' : 'none';
                 }
 
                 function applyProduct(row, productId) {
@@ -618,7 +680,9 @@
                     row.querySelector('.itemName').value = '';
                     row.querySelector('.itemDesc').value = '';
                     row.querySelector('.unit_price').value = 0;
-                    row.querySelector('.nw-search').value = '';
+
+                    const inp = row.querySelector('.nw-search');
+                    if (inp) inp.value = '';
                     setSelectedUI(row, false);
                     closeSuggest();
                     row.querySelector('.nw-search')?.focus();
@@ -678,55 +742,58 @@
                     const tr = document.createElement('tr');
                     tr.className = 'doc-item-row';
                     tr.innerHTML = `
-                    <td>
-                        <div class="nw-picker">
-                            <div class="nw-search-wrap">
-                                <input type="text" class="form-control form-control-sm nw-search"
-                                    placeholder="Search SKU or name…" autocomplete="off">
-                            </div>
+                        <td>
+                            <div class="nw-picker">
+                                <div class="nw-search-wrap">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control nw-search"
+                                            placeholder="Click to select or type to search…" autocomplete="off">
+                                        <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                                    </div>
+                                </div>
 
-                            <div class="nw-picked">
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control pickedText" readonly value="">
-                                    <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
+                                <div class="nw-picked">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control pickedText" readonly value="">
+                                        <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
+                                    </div>
+                                </div>
+
+                                <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
+                                <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+
+                                <div class="nw-desc-wrap">
+                                    <textarea class="form-control form-control-sm itemDesc"
+                                        name="items[${idx}][description]" rows="2"
+                                        placeholder="Description…">${String(prefill.description ?? '')}</textarea>
                                 </div>
                             </div>
+                        </td>
 
-                            <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
-                            <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+                        <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
 
-                            <div class="nw-desc-wrap">
-                                <textarea class="form-control form-control-sm itemDesc"
-                                    name="items[${idx}][description]" rows="2"
-                                    placeholder="Description…">${String(prefill.description ?? '')}</textarea>
-                            </div>
-                        </div>
-                    </td>
+                        <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
+                            name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
 
-                    <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
+                        <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
+                            name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
 
-                    <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                        name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+                        <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
+                            name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
 
-                    <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                        name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+                        <td>
+                            <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
+                                ${taxOptions(defaultTaxId)}
+                            </select>
+                        </td>
 
-                    <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                        name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
+                        <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
+                        <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
 
-                    <td>
-                        <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
-                            ${taxOptions(defaultTaxId)}
-                        </select>
-                    </td>
-
-                    <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
-                    <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
-
-                    <td class="text-end">
-                        <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
-                    </td>
-                `;
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
+                        </td>
+                    `;
 
                     itemsBody.appendChild(tr);
 
@@ -734,35 +801,52 @@
 
                     function renderDropdown(term) {
                         const matches = findMatches(term, 12);
+
                         if (!matches.length) {
                             openSuggest(input, tr,
-                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>`);
+                                `<div class="nw-opt"><div class="nw-sub">No matches</div></div>` +
+                                buildSuggestActionsHtml()
+                            );
                             return;
                         }
+
                         const html = matches.map(p => {
                             const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                                 .filter(Boolean).join(' • ');
                             return `
-                            <div class="nw-opt" data-id="${p.id}">
-                                <div class="nw-name">${p.name ?? '—'}</div>
-                                <div class="nw-sub">${(sub || '').substring(0,130)}</div>
-                            </div>
-                        `;
+                                <div class="nw-opt" data-id="${p.id}">
+                                    <div class="nw-name">${p.name ?? '—'}</div>
+                                    <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                                </div>
+                            `;
                         }).join('');
-                        openSuggest(input, tr, html);
+
+                        openSuggest(input, tr, html + buildSuggestActionsHtml());
                     }
 
-                    input.addEventListener('input', () => renderDropdown(input.value));
-                    input.addEventListener('focus', () => (input.value || '').trim() && renderDropdown(input
-                        .value));
+                    // click opens top products if empty; otherwise search
+                    input.addEventListener('click', () => {
+                        if (!(input.value || '').trim()) return renderTopProducts(input, tr);
+                        renderDropdown(input.value);
+                    });
 
-                    // keyboard nav
+                    input.addEventListener('focus', () => {
+                        if (!(input.value || '').trim()) return;
+                        renderDropdown(input.value);
+                    });
+
+                    input.addEventListener('input', () => renderDropdown(input.value));
+
+                    // keyboard nav (supports create-product row too)
                     input.addEventListener('keydown', (e) => {
                         if (globalSuggest.style.display !== 'block') return;
-                        const opts = Array.from(globalSuggest.querySelectorAll('.nw-opt[data-id]'));
+
+                        const opts = Array.from(globalSuggest.querySelectorAll(
+                            '.nw-opt[data-id], .nw-opt[data-action]'));
                         if (!opts.length) return;
 
                         let activeIndex = opts.findIndex(x => x.classList.contains('active'));
+
                         if (e.key === 'ArrowDown') {
                             e.preventDefault();
                             activeIndex = Math.min(opts.length - 1, activeIndex + 1);
@@ -771,14 +855,35 @@
                             activeIndex = Math.max(0, activeIndex - 1);
                         } else if (e.key === 'Enter') {
                             e.preventDefault();
-                            const chosen = opts[Math.max(0, activeIndex)];
-                            if (chosen) applyProduct(tr, chosen.getAttribute('data-id'));
+                            const chosen = opts[Math.max(0, activeIndex)] || opts[0];
+                            if (!chosen) return;
+
+                            const action = chosen.getAttribute('data-action');
+                            if (action === 'create-product') {
+                                closeSuggest();
+                                window.NWQuickProduct?.open({
+                                    row: tr,
+                                    name: (input.value || '').trim(),
+                                    tax_type_id: tr.querySelector('.taxType')?.value || (
+                                        defaultTaxType?.value || ''),
+                                    afterCreate: (product, rr) => {
+                                        PRODUCTS.push(product);
+                                        applyProduct(rr, product.id);
+                                    }
+                                });
+                                return;
+                            }
+
+                            const id = chosen.getAttribute('data-id');
+                            if (id) applyProduct(tr, id);
                             closeSuggest();
                             return;
                         } else if (e.key === 'Escape') {
                             closeSuggest();
                             return;
-                        } else return;
+                        } else {
+                            return;
+                        }
 
                         opts.forEach(x => x.classList.remove('active'));
                         opts[activeIndex]?.classList.add('active');
@@ -787,23 +892,10 @@
                         });
                     });
 
-                    // click choose (use one global handler once; it will apply to "activeRow")
-                    if (!globalSuggest.dataset.bound) {
-                        globalSuggest.addEventListener('mousedown', (e) => {
-                            const opt = e.target.closest('.nw-opt[data-id]');
-                            if (!opt) return;
-                            e.preventDefault();
-                            const row = activeRow || tr;
-                            if (!row) return;
-                            applyProduct(row, opt.getAttribute('data-id'));
-                            closeSuggest();
-                        });
-                        globalSuggest.dataset.bound = '1';
-                    }
-
                     // prefill
                     if (prefill.product_id) {
                         applyProduct(tr, prefill.product_id);
+
                         if (prefill.qty != null) tr.querySelector('.qty').value = prefill.qty;
                         if (prefill.unit_price != null) tr.querySelector('.unit_price').value = prefill
                             .unit_price;
@@ -813,6 +905,9 @@
                             .tax_type_id;
                         if (prefill.description != null) tr.querySelector('.itemDesc').value = prefill
                             .description;
+                        if (prefill.sku != null) tr.querySelector('.sku').value = prefill.sku;
+
+                        setSelectedUI(tr, true);
                     } else {
                         setSelectedUI(tr, false);
                     }
@@ -820,7 +915,44 @@
                     recalc();
                 }
 
-                // boot rows (old input)
+                // Suggest selection handler (CAPTURE + pointerdown)
+                function handleSuggestSelect(e) {
+                    const opt = e.target.closest('.nw-opt');
+                    if (!opt) return;
+
+                    if (e.button != null && e.button !== 0) return;
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    const action = opt.getAttribute('data-action');
+                    if (action === 'create-product') {
+                        closeSuggest();
+                        if (!activeRow) return;
+
+                        window.NWQuickProduct?.open({
+                            row: activeRow,
+                            name: (activeInput?.value || '').trim(),
+                            tax_type_id: activeRow.querySelector('.taxType')?.value || (defaultTaxType
+                                ?.value || ''),
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                            }
+                        });
+                        return;
+                    }
+
+                    const id = opt.getAttribute('data-id');
+                    if (id && activeRow) {
+                        applyProduct(activeRow, id);
+                        closeSuggest();
+                    }
+                }
+
+                globalSuggest.addEventListener('pointerdown', handleSuggestSelect, true);
+
+                // boot rows
                 const old = window.NW_OLD_ITEMS || [];
                 if (old.length) old.forEach(it => addRow(it));
                 else addRow();
@@ -838,6 +970,26 @@
                 itemsBody.addEventListener('click', (e) => {
                     const row = e.target.closest('.doc-item-row');
                     if (!row) return;
+
+                    // + button -> open modal
+                    const addBtnClick = e.target.closest('.nw-add-product');
+                    if (addBtnClick) {
+                        const term = (row.querySelector('.nw-search')?.value || '').trim();
+                        const taxTypeId = row.querySelector('.taxType')?.value || (defaultTaxType
+                            ?.value || '');
+
+                        window.NWQuickProduct?.open({
+                            row,
+                            name: term,
+                            tax_type_id: taxTypeId,
+                            afterCreate: (product, r) => {
+                                PRODUCTS.push(product);
+                                applyProduct(r, product.id);
+                                closeSuggest();
+                            }
+                        });
+                        return;
+                    }
 
                     if (e.target.classList.contains('clearProductBtn')) {
                         clearProduct(row);

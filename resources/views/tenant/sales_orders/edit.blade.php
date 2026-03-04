@@ -311,6 +311,7 @@
 
         </form>
     </div>
+    @include('tenant.products.partials.quick_add_modal', ['taxTypes' => $taxTypes ?? collect()])
 @endsection
 
 @push('styles')
@@ -397,6 +398,7 @@
 @endpush
 
 @push('scripts')
+    @include('tenant.products.partials.quick_add_modal_scripts')
     @php
         $seedItems = old('items');
 

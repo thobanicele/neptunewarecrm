@@ -239,6 +239,7 @@ return [
             'sales_orders' => ['max_per_month' => null],
 
             'features' => [
+                'invoicing_manual' => true,
                 'ecommerce_module' => true,
                 'ecommerce_inbound_api' => true,
                 'export' => true,

@@ -7,6 +7,8 @@ use App\Models\Company;
 use App\Models\Contact;
 use App\Models\Deal;
 use App\Models\Product;
+use App\Models\Brand;
+use App\Models\Category;
 use App\Models\TaxType;
 use App\Models\User;
 use App\Models\Tenant;
@@ -264,6 +266,16 @@ class InvoiceController extends Controller
                 ->value('id');
         }
 
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
         $companies = Company::query()
             ->where('tenant_id', $tenant->id)
             ->with(['addresses.country', 'addresses.subdivision'])
@@ -335,6 +347,8 @@ class InvoiceController extends Controller
             'defaultTaxTypeId',
             'prefillCompanyId',
             'prefillContactId',
+            'brands',
+            'categories',
         ));
     }
 

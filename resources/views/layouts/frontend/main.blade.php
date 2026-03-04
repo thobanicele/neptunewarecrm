@@ -13,8 +13,6 @@
 
     <link rel="preconnect" href="https://fonts.gstatic.com">
     <link rel="shortcut icon" href="{{ asset('favicon.ico') }}" />
-
-    <link rel="canonical" href="https://demo-basic.adminkit.io/pages-blank.html" />
     <title>NeptuneWare CRM</title>
 
     <link href="{{ asset('asset/css/app.css') }}" rel="stylesheet">

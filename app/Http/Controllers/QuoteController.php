@@ -543,6 +543,15 @@ class QuoteController extends Controller
             'salesPerson',
             'owner',
         ]);
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
 
         $deals = Deal::query()
             ->where('tenant_id', $tenant->id)
@@ -615,7 +624,9 @@ class QuoteController extends Controller
             'salesPeople',
             'products',
             'taxTypes',
-            'defaultTaxTypeId'
+            'defaultTaxTypeId',
+            'brands',
+            'categories',
         ));
     }
 

@@ -10,6 +10,8 @@ use App\Models\Company;
 use App\Models\Contact;
 use App\Models\Deal;
 use App\Models\Product;
+use App\Models\Brand;
+use App\Models\Category;
 use App\Models\TaxType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -141,6 +143,14 @@ class SalesOrderController extends Controller
                 $prefillContactId = null;
             }
         }
+        $brands = Brand::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
+        $categories = Category::query()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id','name']);
 
         // Auto-pick first contact for company if only company provided
         if ($prefillCompanyId && !$prefillContactId && Schema::hasColumn('contacts', 'company_id')) {
@@ -232,6 +242,8 @@ class SalesOrderController extends Controller
             'salesPeople',
             'prefillCompanyId',
             'prefillContactId',
+            'brands',
+            'categories',
         ));
     }
 
