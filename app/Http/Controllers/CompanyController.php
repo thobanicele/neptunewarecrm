@@ -11,6 +11,7 @@ use Illuminate\Validation\Rule;
 use App\Models\Contact;
 use App\Models\User;
 use App\Models\TaxType;
+use App\Models\PaymentTerm;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CompanyController extends Controller
@@ -76,10 +77,14 @@ class CompanyController extends Controller
         $contacts  = Contact::where('tenant_id', $tenant->id)->orderBy('name')->get();
         $users     = User::where('tenant_id', $tenant->id)->orderBy('name')->get();
         $taxTypes  = TaxType::where('tenant_id', $tenant->id)->orderBy('name')->get();
+        $paymentTerms = PaymentTerm::forTenant($tenant->id)
+                    ->where('is_active', 1)
+                    ->orderBy('sort_order')->orderBy('name')
+                    ->get();
 
         $prefillCompanyId = request()->integer('company_id') ?: null;
 
-        return view('tenant.companies.create', compact('countries', 'companies', 'contacts', 'users', 'taxTypes', 'prefillCompanyId'));
+        return view('tenant.companies.create', compact('countries', 'companies', 'contacts', 'users', 'taxTypes', 'prefillCompanyId','paymentTerms', 'tenant'));
     }
 
     public function store(Request $request)
@@ -105,7 +110,11 @@ class CompanyController extends Controller
             ],
 
             'phone'         => ['nullable','max:50'],
-            'payment_terms' => ['nullable','string','max:190'],
+            'payment_term_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('payment_terms', 'id')->where(fn($q) => $q->where('tenant_id', $tenant->id)),
+            ],
             'vat_number'    => ['nullable','string','max:190'],
             'vat_treatment' => ['nullable','in:registered,non_registered,exempt,reverse_charge'],
 
@@ -221,8 +230,12 @@ class CompanyController extends Controller
             ->orderByDesc('is_default_shipping')
             ->orderByDesc('id')
             ->first();
+        $paymentTerms = PaymentTerm::forTenant($tenant->id)
+                    ->where('is_active', 1)
+                    ->orderBy('sort_order')->orderBy('name')
+                    ->get();
 
-        return view('tenant.companies.edit', compact('tenant', 'company', 'countries', 'billing', 'shipping'));
+        return view('tenant.companies.edit', compact('tenant', 'company', 'countries', 'billing', 'shipping', 'paymentTerms'));
     }
 
 
@@ -255,70 +268,93 @@ class CompanyController extends Controller
     public function update(Request $request, Tenant $tenant, Company $company)
     {
         $tenant = app('tenant');
+
         $this->authorize('update', $company);
+
         // safety: ensure company belongs to tenant from route
-        if ((int) $company->tenant_id !== (int) $tenant->id) {
-            abort(404);
-        }
+        abort_unless((int) $company->tenant_id === (int) $tenant->id, 404);
 
         $data = $request->validate([
             'name' => [
                 'required',
+                'string',
                 'max:190',
                 Rule::unique('companies', 'name')
                     ->where(fn ($q) => $q->where('tenant_id', $tenant->id))
                     ->ignore($company->id),
             ],
-            'type' => ['required','in:prospect,customer,individual'],
+
+            'type' => ['required', 'in:prospect,customer,individual'],
 
             'email' => [
                 'nullable',
                 'email',
+                'max:190',
                 Rule::unique('companies', 'email')
                     ->where(fn ($q) => $q->where('tenant_id', $tenant->id))
                     ->ignore($company->id),
             ],
 
-            'phone'         => ['nullable','max:50'],
-            'payment_terms' => ['nullable','string','max:190'],
-            'vat_number'    => ['nullable','string','max:190'],
-            'vat_treatment' => ['nullable','in:registered,non_registered,exempt,reverse_charge'],
+            'phone' => ['nullable', 'string', 'max:50'],
+
+            'payment_term_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('payment_terms', 'id')
+                    ->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
+            ],
+
+            'vat_number'    => ['nullable', 'string', 'max:190'],
+            'vat_treatment' => ['nullable', 'in:registered,non_registered,exempt,reverse_charge'],
 
             // Billing
-            'billing'                  => ['nullable','array'],
-            'billing.make_default'     => ['nullable','boolean'],
-            'billing.label'            => ['nullable','string','max:190'],
-            'billing.attention'        => ['nullable','string','max:190'],
-            'billing.phone'            => ['nullable','string','max:50'],
-            'billing.line1'            => ['nullable','string','max:190'],
-            'billing.line2'            => ['nullable','string','max:190'],
-            'billing.city'             => ['nullable','string','max:190'],
-            'billing.postal_code'      => ['nullable','string','max:30'],
-            'billing.country_iso2'     => ['nullable','string','size:2'],
-            'billing.subdivision_id'   => ['nullable','integer'],
-            'billing.subdivision_text' => ['nullable','string','max:190'],
+            'billing'                  => ['nullable', 'array'],
+            'billing.make_default'     => ['nullable', 'boolean'],
+            'billing.label'            => ['nullable', 'string', 'max:190'],
+            'billing.attention'        => ['nullable', 'string', 'max:190'],
+            'billing.phone'            => ['nullable', 'string', 'max:50'],
+            'billing.line1'            => ['nullable', 'string', 'max:190'],
+            'billing.line2'            => ['nullable', 'string', 'max:190'],
+            'billing.city'             => ['nullable', 'string', 'max:190'],
+            'billing.postal_code'      => ['nullable', 'string', 'max:30'],
+            'billing.country_iso2'     => ['nullable', 'string', 'size:2'],
+            'billing.subdivision_id'   => ['nullable', 'integer'],
+            'billing.subdivision_text' => ['nullable', 'string', 'max:190'],
 
             // Shipping
-            'shipping'                  => ['nullable','array'],
-            'shipping.make_default'     => ['nullable','boolean'],
-            'shipping.label'            => ['nullable','string','max:190'],
-            'shipping.attention'        => ['nullable','string','max:190'],
-            'shipping.phone'            => ['nullable','string','max:50'],
-            'shipping.line1'            => ['nullable','string','max:190'],
-            'shipping.line2'            => ['nullable','string','max:190'],
-            'shipping.city'             => ['nullable','string','max:190'],
-            'shipping.postal_code'      => ['nullable','string','max:30'],
-            'shipping.country_iso2'     => ['nullable','string','size:2'],
-            'shipping.subdivision_id'   => ['nullable','integer'],
-            'shipping.subdivision_text' => ['nullable','string','max:190'],
+            'shipping'                  => ['nullable', 'array'],
+            'shipping.make_default'     => ['nullable', 'boolean'],
+            'shipping.label'            => ['nullable', 'string', 'max:190'],
+            'shipping.attention'        => ['nullable', 'string', 'max:190'],
+            'shipping.phone'            => ['nullable', 'string', 'max:50'],
+            'shipping.line1'            => ['nullable', 'string', 'max:190'],
+            'shipping.line2'            => ['nullable', 'string', 'max:190'],
+            'shipping.city'             => ['nullable', 'string', 'max:190'],
+            'shipping.postal_code'      => ['nullable', 'string', 'max:30'],
+            'shipping.country_iso2'     => ['nullable', 'string', 'size:2'],
+            'shipping.subdivision_id'   => ['nullable', 'integer'],
+            'shipping.subdivision_text' => ['nullable', 'string', 'max:190'],
         ]);
 
-        // 1) Update company
+        // Normalize empty strings to null for some fields (optional but helps)
+        foreach (['email','phone','vat_number','vat_treatment'] as $k) {
+            if (array_key_exists($k, $data) && is_string($data[$k]) && trim($data[$k]) === '') {
+                $data[$k] = null;
+            }
+        }
+
+        // ✅ Update company (NOTE: payment_term_id is now saved)
         $company->update(Arr::only($data, [
-            'name','type','email','phone','payment_terms','vat_number','vat_treatment',
+            'name',
+            'type',
+            'email',
+            'phone',
+            'payment_term_id',
+            'vat_number',
+            'vat_treatment',
         ]));
 
-        // 2) Upsert addresses
+        // ✅ Upsert addresses (your helper should read make_default + fields)
         $this->upsertAddress($company, 'billing', Arr::get($data, 'billing', []));
         $this->upsertAddress($company, 'shipping', Arr::get($data, 'shipping', []));
 

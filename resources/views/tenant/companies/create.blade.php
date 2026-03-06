@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="container-fluid p-0" style="max-width:900px;">
+    <div class="container-fluid px-2 px-md-3" style="max-width:1200px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h1 class="h3 mb-0">Add Company</h1>
@@ -21,6 +21,58 @@
             </div>
         @endif
 
+        <style>
+            .addr-field {
+                margin-bottom: .75rem;
+            }
+
+            .addr-label-col {
+                width: 160px;
+            }
+
+            @media (max-width: 576px) {
+                .addr-label-col {
+                    width: auto;
+                }
+            }
+
+            textarea.form-control {
+                resize: vertical;
+            }
+
+            /* Select2 styling: remove dark border on dropdown search input */
+            .select2-container--default .select2-selection--single {
+                border-color: #ced4da !important;
+                box-shadow: none !important;
+                min-height: calc(2.25rem + 2px);
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                line-height: calc(2.25rem);
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: calc(2.25rem + 2px);
+            }
+
+            .select2-container--default .select2-search--dropdown .select2-search__field {
+                border: 1px solid #ced4da !important;
+                border-radius: .375rem;
+                box-shadow: none !important;
+                outline: none !important;
+            }
+
+            .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+                border-color: #86b7fe !important;
+                box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25) !important;
+            }
+
+            .select2-container--default.select2-container--focus .select2-selection--single {
+                border-color: #86b7fe !important;
+                box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25) !important;
+            }
+        </style>
+
         <div class="card">
             <div class="card-body">
                 <form method="POST" action="{{ tenant_route('tenant.companies.store') }}">
@@ -35,10 +87,10 @@
 
                         <div class="col-12 col-md-6">
                             <label class="form-label">Type</label>
-                            <select class="form-select" name="type">
+                            <select class="form-select js-select2" name="type" data-placeholder="Select type">
+                                <option value=""></option>
                                 @foreach (['prospect', 'customer', 'individual'] as $t)
-                                    <option value="{{ $t }}" @selected(old('type', 'prospect') === $t)>{{ $t }}
-                                    </option>
+                                    <option value="{{ $t }}" @selected(old('type', 'prospect') === $t)>{{ $t }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -53,23 +105,39 @@
                             <input class="form-control" name="phone" value="{{ old('phone') }}">
                         </div>
 
+                        {{-- Payment Terms (managed in Settings only) --}}
                         <div class="col-12 col-md-6">
                             <label class="form-label">Payment Terms</label>
-                            <input type="text" class="form-control" name="payment_terms"
-                                value="{{ old('payment_terms') }}" placeholder="e.g. COD / 30 Days / 50% Deposit">
+                            <select class="form-select js-select2"
+                                    name="payment_term_id"
+                                    data-placeholder="Select payment terms"
+                                    data-allow-clear="1">
+                                <option value=""></option>
+                                @foreach (($paymentTerms ?? collect()) as $pt)
+                                    <option value="{{ $pt->id }}" @selected((string) old('payment_term_id') === (string) $pt->id)>
+                                        {{ $pt->name }} ({{ (int) $pt->days }} days)
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            <div class="form-text">
+                                Manage payment terms in
+                                <a href="{{ tenant_route('tenant.settings.payment_terms.index') }}">Settings</a>.
+                            </div>
                         </div>
 
                         <div class="col-12 col-md-6">
                             <label class="form-label">VAT Number</label>
                             <input class="form-control" name="vat_number" value="{{ old('vat_number') }}"
-                                placeholder="e.g. 49 2030 8527">
+                                   placeholder="e.g. 49 2030 8527">
                             <div class="form-text">Optional. Used on quotes/invoices.</div>
                         </div>
 
                         <div class="col-12 col-md-6">
                             <label class="form-label">VAT Treatment</label>
-                            <select class="form-select" name="vat_treatment">
-                                <option value="">—</option>
+                            <select class="form-select js-select2" name="vat_treatment"
+                                    data-placeholder="Select VAT treatment" data-allow-clear="1">
+                                <option value=""></option>
                                 @foreach (['registered', 'non_registered', 'exempt', 'reverse_charge'] as $vt)
                                     <option value="{{ $vt }}" @selected(old('vat_treatment') === $vt)>
                                         {{ str_replace('_', ' ', $vt) }}
@@ -83,9 +151,9 @@
                     <hr class="my-4">
 
                     {{-- Addresses --}}
-                    <div class="row g-3">
+                    <div class="row g-4">
                         <div class="col-12">
-                            <div class="d-flex justify-content-between align-items-center">
+                            <div>
                                 <div class="fw-semibold">Addresses</div>
                                 <div class="text-muted small">Add now or later in the Company profile.</div>
                             </div>
@@ -93,62 +161,36 @@
 
                         {{-- Billing --}}
                         <div class="col-12 col-lg-6">
-                            <div class="border rounded p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="border rounded-3 p-3 p-md-4 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
                                     <div class="fw-semibold">Billing Address</div>
-                                    <div class="form-check">
+                                    <div class="form-check m-0">
                                         <input class="form-check-input" type="checkbox" name="billing[make_default]"
-                                            value="1" @checked(old('billing.make_default', true)) id="billDefault">
-                                        <label class="form-check-label small" for="billDefault">Default billing</label>
+                                               value="1" @checked(old('billing.make_default', true)) id="billDefault">
+                                        <label class="form-check-label small" for="billDefault">Default</label>
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
-                                    <label class="form-label">Label</label>
-                                    <input class="form-control" name="billing[label]"
-                                        value="{{ old('billing.label', 'Head Office') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Attention</label>
-                                    <input class="form-control" name="billing[attention]"
-                                        value="{{ old('billing.attention') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Phone</label>
-                                    <input class="form-control" name="billing[phone]" value="{{ old('billing.phone') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Address Line 1</label>
-                                    <input class="form-control" name="billing[line1]" value="{{ old('billing.line1') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Address Line 2</label>
-                                    <input class="form-control" name="billing[line2]" value="{{ old('billing.line2') }}">
-                                </div>
-
-                                <div class="row g-2">
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">City</label>
-                                        <input class="form-control" name="billing[city]"
-                                            value="{{ old('billing.city') }}">
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Attention</label>
                                     </div>
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Postal Code</label>
-                                        <input class="form-control" name="billing[postal_code]"
-                                            value="{{ old('billing.postal_code') }}">
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="billing[attention]"
+                                               value="{{ old('billing.attention') }}">
                                     </div>
                                 </div>
 
-                                <div class="row g-2">
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Country</label>
-                                        <select class="form-select js-country" name="billing[country_iso2]"
-                                            data-target="billing">
-                                            <option value="">— select —</option>
+                                {{-- Country --}}
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Country/Region</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <select class="form-select js-country js-select2" name="billing[country_iso2]"
+                                                data-target="billing" data-placeholder="Select country"
+                                                data-allow-clear="1">
+                                            <option value=""></option>
                                             @foreach ($countries ?? collect() as $c)
                                                 <option value="{{ $c->iso2 }}" @selected(old('billing.country_iso2', 'ZA') === $c->iso2)>
                                                     {{ $c->name }}
@@ -156,17 +198,64 @@
                                             @endforeach
                                         </select>
                                     </div>
+                                </div>
 
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Province/State</label>
-                                        <select class="form-select js-subdivision" name="billing[subdivision_id]"
-                                            data-target="billing">
-                                            <option value="">— select —</option>
+                                <div class="d-flex align-items-start gap-3 addr-field">
+                                    <div class="addr-label-col pt-1">
+                                        <label class="form-label mb-0">Address</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <textarea class="form-control mb-2" name="billing[line1]" rows="2" placeholder="Street 1">{{ old('billing.line1') }}</textarea>
+                                        <textarea class="form-control" name="billing[line2]" rows="2" placeholder="Street 2">{{ old('billing.line2') }}</textarea>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">City</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="billing[city]" value="{{ old('billing.city') }}">
+                                    </div>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">ZIP Code</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="billing[postal_code]"
+                                               value="{{ old('billing.postal_code') }}">
+                                    </div>
+                                </div>
+
+                                {{-- State --}}
+                                <div class="d-flex align-items-start gap-3 addr-field">
+                                    <div class="addr-label-col pt-1">
+                                        <label class="form-label mb-0">State</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <select class="form-select js-subdivision js-select2"
+                                                name="billing[subdivision_id]" data-target="billing"
+                                                data-placeholder="Select state" data-allow-clear="1">
+                                            <option value=""></option>
                                         </select>
+
                                         <input class="form-control mt-2 d-none js-subdivision-text"
-                                            name="billing[subdivision_text]" data-target="billing"
-                                            value="{{ old('billing.subdivision_text') }}"
-                                            placeholder="Type province/state (if not in list)">
+                                               name="billing[subdivision_text]" data-target="billing"
+                                               value="{{ old('billing.subdivision_text') }}"
+                                               placeholder="Type province/state (if not in list)">
+                                    </div>
+                                </div>
+
+                                {{-- Phone (no area code dropdown) --}}
+                                <div class="d-flex align-items-center gap-3 addr-field mb-0">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Phone</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="billing[phone]"
+                                               value="{{ old('billing.phone') }}" placeholder="Phone number">
                                     </div>
                                 </div>
                             </div>
@@ -174,65 +263,43 @@
 
                         {{-- Shipping --}}
                         <div class="col-12 col-lg-6">
-                            <div class="border rounded p-3">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div class="fw-semibold">Shipping Address</div>
-                                    <div class="form-check">
+                            <div class="border rounded-3 p-3 p-md-4 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div class="fw-semibold">
+                                        Shipping Address
+                                        <button type="button" class="btn btn-link btn-sm text-decoration-none ps-1"
+                                                id="copyBillingBtn">
+                                            ↓ Copy billing address
+                                        </button>
+                                    </div>
+
+                                    <div class="form-check m-0">
                                         <input class="form-check-input" type="checkbox" name="shipping[make_default]"
-                                            value="1" @checked(old('shipping.make_default', true)) id="shipDefault">
-                                        <label class="form-check-label small" for="shipDefault">Default shipping</label>
+                                               value="1" @checked(old('shipping.make_default', true)) id="shipDefault">
+                                        <label class="form-check-label small" for="shipDefault">Default</label>
                                     </div>
                                 </div>
 
-                                <div class="mb-2">
-                                    <label class="form-label">Label</label>
-                                    <input class="form-control" name="shipping[label]"
-                                        value="{{ old('shipping.label', 'Delivery') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Attention</label>
-                                    <input class="form-control" name="shipping[attention]"
-                                        value="{{ old('shipping.attention') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Phone</label>
-                                    <input class="form-control" name="shipping[phone]"
-                                        value="{{ old('shipping.phone') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Address Line 1</label>
-                                    <input class="form-control" name="shipping[line1]"
-                                        value="{{ old('shipping.line1') }}">
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label">Address Line 2</label>
-                                    <input class="form-control" name="shipping[line2]"
-                                        value="{{ old('shipping.line2') }}">
-                                </div>
-
-                                <div class="row g-2">
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">City</label>
-                                        <input class="form-control" name="shipping[city]"
-                                            value="{{ old('shipping.city') }}">
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Attention</label>
                                     </div>
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Postal Code</label>
-                                        <input class="form-control" name="shipping[postal_code]"
-                                            value="{{ old('shipping.postal_code') }}">
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="shipping[attention]"
+                                               value="{{ old('shipping.attention') }}">
                                     </div>
                                 </div>
 
-                                <div class="row g-2">
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Country</label>
-                                        <select class="form-select js-country" name="shipping[country_iso2]"
-                                            data-target="shipping">
-                                            <option value="">— select —</option>
+                                {{-- Country --}}
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Country/Region</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <select class="form-select js-country js-select2" name="shipping[country_iso2]"
+                                                data-target="shipping" data-placeholder="Select country"
+                                                data-allow-clear="1">
+                                            <option value=""></option>
                                             @foreach ($countries ?? collect() as $c)
                                                 <option value="{{ $c->iso2 }}" @selected(old('shipping.country_iso2', 'ZA') === $c->iso2)>
                                                     {{ $c->name }}
@@ -240,22 +307,69 @@
                                             @endforeach
                                         </select>
                                     </div>
+                                </div>
 
-                                    <div class="col-md-6 mb-2">
-                                        <label class="form-label">Province/State</label>
-                                        <select class="form-select js-subdivision" name="shipping[subdivision_id]"
-                                            data-target="shipping">
-                                            <option value="">— select —</option>
+                                <div class="d-flex align-items-start gap-3 addr-field">
+                                    <div class="addr-label-col pt-1">
+                                        <label class="form-label mb-0">Address</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <textarea class="form-control mb-2" name="shipping[line1]" rows="2" placeholder="Street 1">{{ old('shipping.line1') }}</textarea>
+                                        <textarea class="form-control" name="shipping[line2]" rows="2" placeholder="Street 2">{{ old('shipping.line2') }}</textarea>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">City</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="shipping[city]" value="{{ old('shipping.city') }}">
+                                    </div>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-3 addr-field">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">ZIP Code</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="shipping[postal_code]"
+                                               value="{{ old('shipping.postal_code') }}">
+                                    </div>
+                                </div>
+
+                                {{-- State --}}
+                                <div class="d-flex align-items-start gap-3 addr-field">
+                                    <div class="addr-label-col pt-1">
+                                        <label class="form-label mb-0">State</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <select class="form-select js-subdivision js-select2"
+                                                name="shipping[subdivision_id]" data-target="shipping"
+                                                data-placeholder="Select state" data-allow-clear="1">
+                                            <option value=""></option>
                                         </select>
+
                                         <input class="form-control mt-2 d-none js-subdivision-text"
-                                            name="shipping[subdivision_text]" data-target="shipping"
-                                            value="{{ old('shipping.subdivision_text') }}"
-                                            placeholder="Type province/state (if not in list)">
+                                               name="shipping[subdivision_text]" data-target="shipping"
+                                               value="{{ old('shipping.subdivision_text') }}"
+                                               placeholder="Type province/state (if not in list)">
+                                    </div>
+                                </div>
+
+                                {{-- Phone (no area code dropdown) --}}
+                                <div class="d-flex align-items-center gap-3 addr-field mb-0">
+                                    <div class="addr-label-col">
+                                        <label class="form-label mb-0">Phone</label>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <input class="form-control" name="shipping[phone]"
+                                               value="{{ old('shipping.phone') }}" placeholder="Phone number">
                                     </div>
                                 </div>
 
                                 <div class="form-text mt-2">
-                                    Tip: If shipping = billing, you can fill billing only and add shipping later.
+                                    Tip: If shipping = billing, fill billing only and copy it across.
                                 </div>
                             </div>
                         </div>
@@ -274,6 +388,32 @@
 @push('scripts')
     <script>
         (function() {
+            // -----------------------------
+            // Select2 init (page-wide)
+            // - DO NOT init subdivision selects here (they are dynamic)
+            // -----------------------------
+            function initPageSelect2() {
+                if (!window.jQuery || !window.jQuery.fn.select2) return;
+
+                // all select2 except subdivision (subdivision is managed after options load)
+                window.jQuery('.js-select2').not('.js-subdivision').each(function() {
+                    const $el = window.jQuery(this);
+
+                    if ($el.data('select2')) return;
+
+                    $el.select2({
+                        width: '100%',
+                        placeholder: this.getAttribute('data-placeholder') || '',
+                        allowClear: this.getAttribute('data-allow-clear') === '1'
+                    });
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', initPageSelect2);
+
+            // -----------------------------
+            // Subdivisions (dynamic + Select2-safe)
+            // -----------------------------
             const SUBDIV_URL_TEMPLATE = @json(tenant_route('tenant.geo.subdivisions', ['countryIso2' => '__ISO2__']));
 
             function subdivUrl(iso2) {
@@ -291,19 +431,53 @@
                 return await res.json();
             }
 
+            function hasSelect2(el) {
+                return !!(window.jQuery && window.jQuery(el).data('select2'));
+            }
+
+            function destroySelect2(el) {
+                if (!window.jQuery) return;
+                if (hasSelect2(el)) window.jQuery(el).select2('destroy');
+            }
+
+            function initSelect2On(el) {
+                if (!window.jQuery || !window.jQuery.fn.select2) return;
+
+                // Select2 width breaks when element is hidden
+                if (el.classList.contains('d-none')) return;
+
+                const $el = window.jQuery(el);
+                if ($el.data('select2')) return;
+
+                $el.select2({
+                    width: '100%',
+                    placeholder: el.getAttribute('data-placeholder') || '',
+                    allowClear: el.getAttribute('data-allow-clear') === '1'
+                });
+            }
+
             function fillSubdivisions(target, list, selectedId) {
                 const sel = document.querySelector(`.js-subdivision[data-target="${target}"]`);
                 const txt = document.querySelector(`.js-subdivision-text[data-target="${target}"]`);
                 if (!sel || !txt) return;
 
-                sel.innerHTML = `<option value="">— select —</option>`;
+                // Always destroy select2 before touching options
+                destroySelect2(sel);
+
+                // reset fallback input
+                txt.value = '';
+
+                // rebuild options
+                sel.innerHTML = `<option value=""></option>`;
 
                 if (!list.length) {
+                    // no subdivisions -> show text input
                     sel.classList.add('d-none');
                     txt.classList.remove('d-none');
                     return;
                 }
 
+                // show select
                 sel.classList.remove('d-none');
                 txt.classList.add('d-none');
 
@@ -314,28 +488,113 @@
                     if (String(s.id) === String(selectedId)) opt.selected = true;
                     sel.appendChild(opt);
                 });
-            }
 
-            async function handleCountryChange(e) {
-                const target = e.target.getAttribute('data-target');
-                const iso2 = e.target.value;
-                const list = await loadSubdivisions(iso2);
-                fillSubdivisions(target, list, null);
-            }
+                // init select2 after visible + options exist
+                initSelect2On(sel);
 
-            document.querySelectorAll('.js-country').forEach(el => {
-                el.addEventListener('change', handleCountryChange);
-            });
+                // ensure selection sticks
+                if (selectedId != null && window.jQuery) {
+                    window.jQuery(sel).val(String(selectedId)).trigger('change');
+                }
+            }
 
             async function bootOne(target, iso2, selectedSubdivisionId) {
                 const list = await loadSubdivisions(iso2);
                 fillSubdivisions(target, list, selectedSubdivisionId);
             }
 
-            bootOne('billing', document.querySelector('.js-country[data-target="billing"]')?.value || 'ZA',
-                @json(old('billing.subdivision_id')));
-            bootOne('shipping', document.querySelector('.js-country[data-target="shipping"]')?.value || 'ZA',
-                @json(old('shipping.subdivision_id')));
+            // Bind country change in a Select2-safe way
+            function bindCountryChange() {
+                if (window.jQuery) {
+                    // delegated event: works even after Select2 wraps
+                    window.jQuery(document).on('change', '.js-country', async function() {
+                        const target = this.getAttribute('data-target');
+                        const iso2 = this.value;
+
+                        // clear immediately (shows text fallback while loading)
+                        fillSubdivisions(target, [], null);
+
+                        const list = await loadSubdivisions(iso2);
+                        fillSubdivisions(target, list, null);
+                    });
+                } else {
+                    // fallback
+                    document.querySelectorAll('.js-country').forEach(el => {
+                        el.addEventListener('change', async function(e) {
+                            const target = e.target.getAttribute('data-target');
+                            const iso2 = e.target.value;
+
+                            fillSubdivisions(target, [], null);
+
+                            const list = await loadSubdivisions(iso2);
+                            fillSubdivisions(target, list, null);
+                        });
+                    });
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+                bindCountryChange();
+
+                bootOne(
+                    'billing',
+                    document.querySelector('.js-country[data-target="billing"]')?.value || 'ZA',
+                    @json(old('billing.subdivision_id'))
+                );
+
+                bootOne(
+                    'shipping',
+                    document.querySelector('.js-country[data-target="shipping"]')?.value || 'ZA',
+                    @json(old('shipping.subdivision_id'))
+                );
+            });
+
+            // -----------------------------
+            // Copy billing -> shipping
+            // -----------------------------
+            const copyBtn = document.getElementById('copyBillingBtn');
+
+            function setVal(name, val) {
+                const el = document.querySelector(`[name="${name}"]`);
+                if (!el) return;
+
+                el.value = val ?? '';
+
+                // for select2 + normal selects
+                el.dispatchEvent(new Event('change', {
+                    bubbles: true
+                }));
+                el.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+            }
+
+            async function copyBillingToShipping() {
+                setVal('shipping[attention]', document.querySelector('[name="billing[attention]"]')?.value);
+                setVal('shipping[line1]', document.querySelector('[name="billing[line1]"]')?.value);
+                setVal('shipping[line2]', document.querySelector('[name="billing[line2]"]')?.value);
+                setVal('shipping[city]', document.querySelector('[name="billing[city]"]')?.value);
+                setVal('shipping[postal_code]', document.querySelector('[name="billing[postal_code]"]')?.value);
+                setVal('shipping[phone]', document.querySelector('[name="billing[phone]"]')?.value);
+
+                const billCountry = document.querySelector('[name="billing[country_iso2]"]')?.value || '';
+                setVal('shipping[country_iso2]', billCountry);
+
+                const billSubId = document.querySelector('[name="billing[subdivision_id]"]')?.value || '';
+                const billSubText = document.querySelector('[name="billing[subdivision_text]"]')?.value || '';
+
+                const list = await loadSubdivisions(billCountry);
+                fillSubdivisions('shipping', list, billSubId);
+
+                const shippingSubSel = document.querySelector('.js-subdivision[data-target="shipping"]');
+                const shippingSubTxt = document.querySelector('.js-subdivision-text[data-target="shipping"]');
+
+                if (shippingSubSel?.classList.contains('d-none') && shippingSubTxt && billSubText) {
+                    shippingSubTxt.value = billSubText;
+                }
+            }
+
+            if (copyBtn) copyBtn.addEventListener('click', copyBillingToShipping);
         })();
     </script>
 @endpush

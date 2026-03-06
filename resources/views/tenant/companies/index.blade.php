@@ -134,93 +134,95 @@
         {{-- Table --}}
         <div class="card mt-3">
             <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table mb-0 table-hover table-sm align-middle">
-                        <thead>
-                            <tr>
-                                <x-index.th-sort label="Name" key="name" :sort="$sort" :dir="$dir"
-                                    defaultDir="asc" />
-                                <x-index.th-sort label="Type" key="type" :sort="$sort" :dir="$dir"
-                                    defaultDir="asc" />
-                                <x-index.th-sort label="Email" key="email" :sort="$sort" :dir="$dir"
-                                    defaultDir="asc" />
-                                <x-index.th-sort label="Phone" key="phone" :sort="$sort" :dir="$dir"
-                                    defaultDir="asc" />
-                                <x-index.th-sort label="Updated" key="updated_at" :sort="$sort" :dir="$dir" />
-                                <th class="text-end" style="width: 220px;">Actions</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            @forelse($companies as $c)
+                <div class="nw-table-scroll">
+                    <div class="table-responsive nw-table-responsive">
+                        <table class="table mb-0 table-hover table-sm align-middle">
+                            <thead>
                                 <tr>
-                                    <td class="fw-semibold">
-                                        <a class="text-decoration-none"
-                                            href="{{ tenant_route('tenant.companies.show', $c) }}">
-                                            {{ $c->name }}
-                                        </a>
-                                    </td>
+                                    <x-index.th-sort label="Name" key="name" :sort="$sort" :dir="$dir"
+                                        defaultDir="asc" />
+                                    <x-index.th-sort label="Type" key="type" :sort="$sort" :dir="$dir"
+                                        defaultDir="asc" />
+                                    <x-index.th-sort label="Email" key="email" :sort="$sort" :dir="$dir"
+                                        defaultDir="asc" />
+                                    <x-index.th-sort label="Phone" key="phone" :sort="$sort" :dir="$dir"
+                                        defaultDir="asc" />
+                                    <x-index.th-sort label="Updated" key="updated_at" :sort="$sort" :dir="$dir" />
+                                    <th class="text-end" style="width: 220px;">Actions</th>
+                                </tr>
+                            </thead>
 
-                                    <td class="text-muted">{{ $c->type ?: '—' }}</td>
-                                    <td class="text-muted">{{ $c->email ?? '—' }}</td>
-                                    <td class="text-muted">{{ $c->phone ?? '—' }}</td>
-
-                                    <td class="text-muted">{{ optional($c->updated_at)->format('d/m/Y') ?? '—' }}</td>
-
-                                    <td class="text-end">
-                                        <div class="btn-group" role="group" aria-label="Company actions">
-                                            <a class="btn btn-sm btn-outline-primary"
+                            <tbody>
+                                @forelse($companies as $c)
+                                    <tr>
+                                        <td class="fw-semibold">
+                                            <a class="text-decoration-none"
                                                 href="{{ tenant_route('tenant.companies.show', $c) }}">
-                                                View
+                                                {{ $c->name }}
                                             </a>
+                                        </td>
 
-                                            <button type="button"
-                                                class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split"
-                                                data-bs-toggle="dropdown" aria-expanded="false">
-                                                <span class="visually-hidden">Toggle Dropdown</span>
-                                            </button>
+                                        <td class="text-muted">{{ $c->type ?: '—' }}</td>
+                                        <td class="text-muted">{{ $c->email ?? '—' }}</td>
+                                        <td class="text-muted">{{ $c->phone ?? '—' }}</td>
 
-                                            <ul class="dropdown-menu dropdown-menu-end">
-                                                @can('update', $c)
-                                                    <li>
-                                                        <a class="dropdown-item"
-                                                            href="{{ tenant_route('tenant.companies.edit', $c) }}">
-                                                            Edit
-                                                        </a>
-                                                    </li>
-                                                @endcan
+                                        <td class="text-muted">{{ optional($c->updated_at)->format('d/m/Y') ?? '—' }}</td>
 
-                                                @can('delete', $c)
-                                                    <li>
-                                                        <hr class="dropdown-divider">
-                                                    </li>
-                                                    <li>
-                                                        <form method="POST"
-                                                            action="{{ tenant_route('tenant.companies.destroy', $c) }}"
-                                                            onsubmit="return confirm(@js('Delete ' . $c->name . '? This cannot be undone.'));">
+                                        <td class="text-end">
+                                            <div class="btn-group dropup" role="group" aria-label="Company actions">
+                                                <a class="btn btn-sm btn-outline-primary"
+                                                    href="{{ tenant_route('tenant.companies.show', $c) }}">
+                                                    View
+                                                </a>
 
-                                                            @csrf
-                                                            @method('DELETE')
+                                                <button type="button"
+                                                    class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split"
+                                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                                </button>
 
-                                                            <button type="submit" class="dropdown-item text-danger">
-                                                                Delete
-                                                            </button>
-                                                        </form>
-                                                    </li>
-                                                @endcan
-                                            </ul>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
-                                        No companies found.
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                                                <ul class="dropdown-menu dropdown-menu-end">
+                                                    @can('update', $c)
+                                                        <li>
+                                                            <a class="dropdown-item"
+                                                                href="{{ tenant_route('tenant.companies.edit', $c) }}">
+                                                                Edit
+                                                            </a>
+                                                        </li>
+                                                    @endcan
+
+                                                    @can('delete', $c)
+                                                        <li>
+                                                            <hr class="dropdown-divider">
+                                                        </li>
+                                                        <li>
+                                                            <form method="POST"
+                                                                action="{{ tenant_route('tenant.companies.destroy', $c) }}"
+                                                                onsubmit="return confirm(@js('Delete ' . $c->name . '? This cannot be undone.'));">
+
+                                                                @csrf
+                                                                @method('DELETE')
+
+                                                                <button type="submit" class="dropdown-item text-danger">
+                                                                    Delete
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                    @endcan
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            No companies found.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -257,19 +259,44 @@
                 t = setTimeout(() => {
                     const url = new URL(window.location.href);
 
-                    // set/clear q
-                    if ((input.value || '').trim() === '') {
-                        url.searchParams.delete('q');
-                    } else {
-                        url.searchParams.set('q', input.value);
-                    }
+                    if ((input.value || '').trim() === '') url.searchParams.delete('q');
+                    else url.searchParams.set('q', input.value);
 
-                    // whenever searching, reset paging
                     url.searchParams.set('page', '1');
-
                     window.location.href = url.toString();
                 }, 450);
             });
+        })();
+
+        // ✅ Fix: dropdown hidden near bottom → auto switch to dropup when needed
+        (function() {
+            function applySmartDropups() {
+                const groups = document.querySelectorAll('tbody .btn-group');
+                if (!groups.length) return;
+
+                groups.forEach(g => g.classList.remove('dropup'));
+
+                const viewportBottom = window.innerHeight;
+                const buffer = 220; // space we want for the menu
+
+                groups.forEach(group => {
+                    const toggle = group.querySelector('[data-bs-toggle="dropdown"]');
+                    if (!toggle) return;
+
+                    const rect = toggle.getBoundingClientRect();
+
+                    // If the toggle is too close to bottom, open upward
+                    if (rect.bottom > (viewportBottom - buffer)) {
+                        group.classList.add('dropup');
+                    }
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', applySmartDropups);
+            window.addEventListener('resize', applySmartDropups);
+
+            // If inside a scroll container, re-evaluate on scroll too
+            document.addEventListener('scroll', applySmartDropups, true);
         })();
     </script>
 @endpush

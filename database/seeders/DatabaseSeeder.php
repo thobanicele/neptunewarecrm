@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             TenantRolesSeeder::class,
             TenantTaxTypeSeeder::class,
             PipelineSeeder::class,
+            PaymentTermSeeder::class,
             // Add these if you have them:
             // PipelineSeeder::class,
             // PlatformOwnerSeeder::class,

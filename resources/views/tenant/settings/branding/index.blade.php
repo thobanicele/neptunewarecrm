@@ -84,6 +84,22 @@
             </div>
         </div>
 
+        <div class="card mb-3">
+            <div class="card-body d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                <div>
+                    <div class="fw-semibold">Payment Terms</div>
+                    <div class="text-muted small">Manage payment terms for your customers.</div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="{{ tenant_route('tenant.settings.payment_terms.index', ['tenant' => $tenant->subdomain ?? $tenant]) }}"
+                        class="btn btn-outline-primary">
+                        <i class="fe fe-percent me-2"></i> Payment Terms
+                    </a>
+                </div>
+            </div>
+        </div>
+
         @php
             // purely informational badge
             $logoDisk = config('filesystems.tenant_logo_disk', 'tenant_logos');

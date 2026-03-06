@@ -58,6 +58,9 @@ use App\Http\Controllers\BrandsController;
 use App\Http\Controllers\CategoriesController;
 use App\Http\Controllers\QuickAddBrandController;
 use App\Http\Controllers\QuickAddCategoryController;
+use App\Http\Controllers\PaymentTermsController;
+
+use App\Http\Controllers\Tenant\Api\Select2Controller;
 
 // ✅ Platform Owner tenants admin
 use App\Http\Controllers\Admin\TenantAdminController;
@@ -174,6 +177,12 @@ Route::prefix('t/{tenant:subdomain}')
         Route::get('branding/logo', [\App\Http\Controllers\TenantBrandingLogoController::class, 'show'])
             ->name('tenant.branding.logo');
 
+        Route::get('/api/select2/{resource}', [Select2Controller::class, 'search'])
+            ->name('tenant.api.select2.search');
+
+        Route::get('/api/select2/{resource}/{id}', [Select2Controller::class, 'show'])
+            ->name('tenant.api.select2.show');
+
         /*
         |--------------------------------------------------------------------------
         | My Profile (all tenant users)
@@ -192,6 +201,30 @@ Route::prefix('t/{tenant:subdomain}')
         // Branding update
         Route::put('settings/branding', [TenantSettingsController::class, 'brandingUpdate'])
             ->name('tenant.settings.branding.update');
+        /*
+        |-------------------------------------------------------------------------
+        | Payment Terms
+        |-------------------------------------------------------------------------
+        */
+        Route::prefix('settings')->name('tenant.settings.')->group(function () {
+            Route::get('payment-terms', [PaymentTermsController::class, 'index'])->name('payment_terms.index');
+            Route::get('payment-terms/create', [PaymentTermsController::class, 'create'])->name('payment_terms.create');
+            Route::post('payment-terms', [PaymentTermsController::class, 'store'])->name('payment_terms.store');
+
+            Route::get('payment-terms/{paymentTerm}/edit', [PaymentTermsController::class, 'edit'])
+                ->whereNumber('paymentTerm')->name('payment_terms.edit');
+
+            Route::put('payment-terms/{paymentTerm}', [PaymentTermsController::class, 'update'])
+                ->whereNumber('paymentTerm')->name('payment_terms.update');
+
+            Route::post('payment-terms/{paymentTerm}/toggle', [PaymentTermsController::class, 'toggle'])
+                ->whereNumber('paymentTerm')
+                ->name('payment_terms.toggle');
+
+            Route::delete('payment-terms/{paymentTerm}', [PaymentTermsController::class, 'destroy'])
+                ->whereNumber('paymentTerm')
+                ->name('payment_terms.destroy');
+                    });
 
         /*
         |--------------------------------------------------------------------------

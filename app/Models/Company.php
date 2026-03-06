@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Company extends Model
 {
     protected $fillable = [
-        'tenant_id','name','type','email','phone','website','industry','address','billing_address',
+        'tenant_id','name','type','email','phone','payment_term_id','website','industry','address','billing_address',
         'shipping_address',
         'vat_treatment',
         'vat_number',
@@ -36,6 +36,11 @@ class Company extends Model
     public function defaultShippingAddress()
     {
         return $this->hasOne(\App\Models\CompanyAddress::class)->where('is_default_shipping', true);
+    }
+
+    public function paymentTerm()
+    {
+        return $this->belongsTo(\App\Models\PaymentTerm::class, 'payment_term_id');
     }
 
 }
