@@ -278,17 +278,22 @@ class ProductController extends Controller
             ->with('success', 'Product updated.');
     }
 
-    public function destroy(\App\Models\Tenant $tenant, Product $product)
+    public function destroy(Tenant $tenant, Product $product)
     {
         $tenant = app('tenant');
         $this->authorize('delete', $product);
-        abort_unless((int) $product->tenant_id === (int) $tenant->id, 404);
+
+        if ((int) $product->tenant_id !== (int) $tenant->id) abort(404);
+
+        if ($product->isUsedInTransactions()) {
+            $product->update(['is_active' => false]);
+
+            return back()->with('success', 'Product has transactions, so it was deactivated (not deleted).');
+        }
 
         $product->delete();
 
-        return redirect()
-            ->to(tenant_route('tenant.products.index'))
-            ->with('success', 'Product deleted.');
+        return back()->with('success', 'Product deleted.');
     }
 
     public function export(string $tenantKey, Request $request): StreamedResponse

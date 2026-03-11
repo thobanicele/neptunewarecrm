@@ -19,21 +19,33 @@
                 <form method="POST" action="{{ tenant_route('tenant.contacts.store') }}">
                     @csrf
 
+                    {{-- Company (Select2 AJAX) --}}
                     <div class="mb-3">
                         <label class="form-label">Company</label>
-                        <select class="form-select" name="company_id" required>
-                            <option value="">-- select --</option>
-                            @foreach ($companies as $c)
-                                <option value="{{ $c->id }}">{{ $c->name }}</option>
-                            @endforeach
+                        <select class="form-select js-select2" name="company_id" required
+                            data-placeholder="Search company..." data-allow-clear="1"
+                            data-ajax-url="{{ tenant_route('tenant.api.select2.search', ['resource' => 'companies']) }}"
+                            data-min-input="2" data-delay="250">
+                            <option value=""></option>
+
+                            {{-- Preselect after validation error --}}
+                            @if (old('company_id'))
+                                <option value="{{ old('company_id') }}" selected>
+                                    {{ old('company_id') }}
+                                </option>
+                            @endif
                         </select>
+                        <div class="form-text">Start typing to search companies.</div>
                     </div>
 
+                    {{-- Lifecycle (Select2 static) --}}
                     <div class="mb-3">
                         <label class="form-label">Lifecycle</label>
-                        <select class="form-select" name="lifecycle_stage" required>
-                            <option value="qualified">qualified</option>
-                            <option value="customer">customer</option>
+                        <select class="form-select js-select2" name="lifecycle_stage" required
+                            data-placeholder="Select lifecycle" data-allow-clear="0">
+                            <option value=""></option>
+                            <option value="qualified" @selected(old('lifecycle_stage', 'qualified') === 'qualified')>qualified</option>
+                            <option value="customer" @selected(old('lifecycle_stage') === 'customer')>customer</option>
                         </select>
                     </div>
 
@@ -65,3 +77,17 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.initSelect2) {
+                window.initSelect2(document);
+            } else if (window.jQuery) {
+                window.jQuery('.js-select2').select2({
+                    width: '100%'
+                });
+            }
+        });
+    </script>
+@endpush

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Models;
+use App\Models\{QuoteItem, InvoiceItem, SalesOrderItem, CreditNoteItem};
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -38,6 +39,16 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(\App\Models\Category::class, 'category_id');
+    }
+
+    public function isUsedInTransactions(): bool
+    {
+        $tenantId = (int) $this->tenant_id;
+
+        return QuoteItem::where('tenant_id', $tenantId)->where('product_id', $this->id)->exists()
+            || InvoiceItem::where('tenant_id', $tenantId)->where('product_id', $this->id)->exists()
+            || SalesOrderItem::where('tenant_id', $tenantId)->where('product_id', $this->id)->exists()
+            || CreditNoteItem::where('tenant_id', $tenantId)->where('product_id', $this->id)->exists();
     }
 }
 

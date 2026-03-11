@@ -397,7 +397,9 @@
                         <div class="nw-box">
                             <h6>Bill To</h6>
                             <div class="fw-bold" style="color:#2563eb;">
-                                {{ $invoice->company?->name ?? '—' }}
+                                <a href="{{ tenant_route('tenant.companies.show', ['company' => $invoice->company->id]) }}">
+                                    {{ $invoice->company?->name ?? '—' }}
+                                </a>
                             </div>
 
                             @if ($invoice->company?->vat_number)
@@ -424,10 +426,6 @@
 
                         <div class="nw-box">
                             <h6>Ship To</h6>
-                            <div class="fw-bold">
-                                {{ $invoice->company?->name ?? '—' }}
-                            </div>
-
                             @if (!empty($shipTo))
                                 <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>
                             @else

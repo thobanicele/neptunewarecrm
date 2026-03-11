@@ -18,6 +18,7 @@ class ProductPolicy
     }
     public function delete(User $user, Product $product): bool {
         return $user->can('products.delete') && (int)$product->tenant_id === (int)$user->tenant_id;
+        return !$product->isUsedInTransactions();
     }
     public function export(User $user): bool { return $user->can('products.export'); }
 }

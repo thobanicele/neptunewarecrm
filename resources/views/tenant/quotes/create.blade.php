@@ -69,7 +69,6 @@
                                             @endforeach
                                         </select>
                                     </div>
-
                                     <div class="col-6">
                                         <div class="text-muted small">Salesperson</div>
                                         <select class="form-select @error('sales_person_user_id') is-invalid @enderror"
@@ -84,7 +83,6 @@
                                             <div class="invalid-feedback">{{ $message }}</div>
                                         @enderror
                                     </div>
-
                                     <div class="col-12">
                                         <div class="text-muted small">Associate Deal (optional)</div>
                                         <select class="form-select" name="deal_id" id="dealSelect">
@@ -96,14 +94,12 @@
                                             @endforeach
                                         </select>
                                     </div>
-
                                     <div class="col-12">
                                         <div class="text-muted small">Customer Reference #</div>
                                         <input type="text" class="form-control" name="customer_reference"
                                             value="{{ old('customer_reference') }}" placeholder="e.g. PO-12345 / Ref-9876">
                                         <div class="form-text">Customer can type their internal reference / PO number.</div>
                                     </div>
-
                                 </div>
                             </div>
                             <div class="form-text">Owner is who creates it; Salesperson gets credit.</div>
@@ -111,7 +107,6 @@
                     </div>
 
                     <hr class="my-3">
-
                     {{-- Customer + Contact --}}
                     <div class="row g-3">
                         <div class="col-12 col-lg-8">
@@ -300,7 +295,6 @@
         </form>
     </div>
 
-    {{-- Reusable Quick Add Product Modal (partial) --}}
     @include('tenant.products.partials.quick_add_modal', ['taxTypes' => $taxTypes ?? collect()])
 @endsection
 
@@ -403,7 +397,6 @@
             background: rgba(13, 110, 253, .06);
         }
 
-        /* + button size */
         .nw-search-wrap .btn {
             padding: .18rem .45rem;
             line-height: 1;
@@ -413,7 +406,6 @@
 @endpush
 
 @push('scripts')
-    {{-- Quick Add Product JS (partial) --}}
     @include('tenant.products.partials.quick_add_modal_scripts')
 
     <script>
@@ -425,9 +417,6 @@
 
         document.addEventListener('DOMContentLoaded', function() {
 
-            // ============================
-            // CONTACTS loader
-            // ============================
             (function initContactsLoader() {
                 const companySelect = document.getElementById('companySelect');
                 const contactSelect = document.getElementById('contactSelect');
@@ -490,9 +479,6 @@
                 else setContactOptions([], '');
             })();
 
-            // ============================
-            // COMPANY blocks
-            // ============================
             (function initCompanyBlocks() {
                 const companySelect = document.getElementById('companySelect');
                 const billingBox = document.getElementById('billingBox');
@@ -500,8 +486,17 @@
                 const vatTreatmentLine = document.getElementById('vatTreatmentLine');
                 const paymentTermsLine = document.getElementById('paymentTermsLine');
 
+                function escapeHtml(value) {
+                    return String(value ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                }
+
                 function nl2br(s) {
-                    return (s || '').replace(/\n/g, '<br>');
+                    return escapeHtml(s || '').replace(/\n/g, '<br>');
                 }
 
                 function refreshCompanyBlocks() {
@@ -538,9 +533,6 @@
                 refreshCompanyBlocks();
             })();
 
-            // ============================
-            // ITEMS picker
-            // ============================
             (function initQuoteItems() {
                 const itemsBody = document.getElementById('itemsBody');
                 const addBtn = document.getElementById('addItemBtn');
@@ -549,6 +541,15 @@
 
                 const PRODUCTS = Object.values(window.NW_PRODUCTS || {});
                 const TAXTYPES = window.NW_TAXTYPES || {};
+
+                function escapeHtml(value) {
+                    return String(value ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                }
 
                 function money(n) {
                     const x = Number(n || 0);
@@ -573,12 +574,11 @@
                     Object.values(TAXTYPES).forEach(t => {
                         const sel = String(t.id) === String(selectedId) ? 'selected' : '';
                         html +=
-                            `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
+                            `<option value="${escapeHtml(t.id)}" ${sel}>${escapeHtml(t.name)} (${money(parseFloat(t.rate || 0))}%)</option>`;
                     });
                     return html;
                 }
 
-                // dropdown
                 const globalSuggest = document.createElement('div');
                 globalSuggest.className = 'nw-suggest';
                 document.body.appendChild(globalSuggest);
@@ -615,6 +615,7 @@
 
                     if (r.bottom < 0 || r.top > window.innerHeight) closeSuggest();
                 }
+
                 globalSuggest.addEventListener('wheel', (e) => e.stopPropagation(), {
                     passive: true
                 });
@@ -685,9 +686,9 @@
                         const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                             .filter(Boolean).join(' • ');
                         return `
-                            <div class="nw-opt" data-id="${p.id}">
-                                <div class="nw-name">${p.name ?? '—'}</div>
-                                <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                            <div class="nw-opt" data-id="${escapeHtml(p.id)}">
+                                <div class="nw-name">${escapeHtml(p.name ?? '—')}</div>
+                                <div class="nw-sub">${escapeHtml((sub || '').substring(0, 130))}</div>
                             </div>
                         `;
                     }).join('');
@@ -711,6 +712,7 @@
 
                     row.querySelector('.product_id').value = p.id;
                     row.querySelector('.sku').value = p.sku ?? '';
+                    row.querySelector('.unit').value = p.unit ?? '';
                     row.querySelector('.pickedText').value = `${p.name ?? ''}${p.sku ? ' • ' + p.sku : ''}`;
                     row.querySelector('.itemName').value = p.name ?? '';
                     row.querySelector('.itemDesc').value = p.description ?? '';
@@ -723,6 +725,7 @@
                 function clearProduct(row) {
                     row.querySelector('.product_id').value = '';
                     row.querySelector('.sku').value = '';
+                    row.querySelector('.unit').value = '';
                     row.querySelector('.pickedText').value = '';
                     row.querySelector('.itemName').value = '';
                     row.querySelector('.itemDesc').value = '';
@@ -782,7 +785,6 @@
                     });
                 }
 
-                // ✅ dropdown select (pointerdown capture)
                 function handleSuggestSelect(e) {
                     const opt = e.target.closest('.nw-opt');
                     if (!opt) return;
@@ -845,27 +847,28 @@
                                     </div>
                                 </div>
 
-                                <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
-                                <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+                                <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${escapeHtml(prefill.product_id ?? '')}">
+                                <input type="hidden" class="itemName" name="items[${idx}][name]" value="${escapeHtml(prefill.name ?? '')}">
+                                <input type="hidden" class="unit" name="items[${idx}][unit]" value="${escapeHtml(prefill.unit ?? '')}">
 
                                 <div class="nw-desc-wrap">
                                     <textarea class="form-control form-control-sm itemDesc"
                                         name="items[${idx}][description]" rows="2"
-                                        placeholder="Description…">${String(prefill.description ?? '')}</textarea>
+                                        placeholder="Description…">${escapeHtml(prefill.description ?? '')}</textarea>
                                 </div>
                             </div>
                         </td>
 
-                        <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
+                        <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${escapeHtml(prefill.sku ?? '')}" readonly></td>
 
                         <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                            name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+                            name="items[${idx}][qty]" value="${escapeHtml(prefill.qty ?? 1)}" required></td>
 
                         <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                            name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+                            name="items[${idx}][unit_price]" value="${escapeHtml(prefill.unit_price ?? 0)}" required></td>
 
                         <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                            name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
+                            name="items[${idx}][discount_pct]" value="${escapeHtml(prefill.discount_pct ?? 0)}"></td>
 
                         <td>
                             <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
@@ -898,9 +901,9 @@
                             const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                                 .filter(Boolean).join(' • ');
                             return `
-                                <div class="nw-opt" data-id="${p.id}">
-                                    <div class="nw-name">${p.name ?? '—'}</div>
-                                    <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
+                                <div class="nw-opt" data-id="${escapeHtml(p.id)}">
+                                    <div class="nw-name">${escapeHtml(p.name ?? '—')}</div>
+                                    <div class="nw-sub">${escapeHtml((sub || '').substring(0, 130))}</div>
                                 </div>
                             `;
                         }).join('');
@@ -912,13 +915,14 @@
                         if (!(input.value || '').trim()) return renderTopProducts(input, tr);
                         renderDropdown(input.value);
                     });
+
                     input.addEventListener('focus', () => {
                         if (!(input.value || '').trim()) return;
                         renderDropdown(input.value);
                     });
+
                     input.addEventListener('input', () => renderDropdown(input.value));
 
-                    // + button opens modal
                     tr.querySelector('.nw-add-product')?.addEventListener('click', () => {
                         const name = (input.value || '').trim();
                         const taxTypeId = tr.querySelector('.taxType')?.value || (defaultTaxType
@@ -935,8 +939,19 @@
                         });
                     });
 
-                    if (prefill.product_id) {
-                        applyProduct(tr, prefill.product_id);
+                    if (prefill.product_id || prefill.name || prefill.description || prefill.sku) {
+                        tr.querySelector('.product_id').value = prefill.product_id ?? '';
+                        tr.querySelector('.itemName').value = prefill.name ?? '';
+                        tr.querySelector('.itemDesc').value = prefill.description ?? '';
+                        tr.querySelector('.sku').value = prefill.sku ?? '';
+                        tr.querySelector('.unit').value = prefill.unit ?? '';
+                        tr.querySelector('.qty').value = prefill.qty ?? 1;
+                        tr.querySelector('.unit_price').value = prefill.unit_price ?? 0;
+                        tr.querySelector('.discount_pct').value = prefill.discount_pct ?? 0;
+                        tr.querySelector('.taxType').value = prefill.tax_type_id ?? '';
+                        tr.querySelector('.pickedText').value =
+                            `${prefill.name ?? ''}${prefill.sku ? ' • ' + prefill.sku : ''}`;
+
                         setSelectedUI(tr, true);
                     } else {
                         setSelectedUI(tr, false);
@@ -945,7 +960,6 @@
                     recalc();
                 }
 
-                // Boot rows
                 const old = window.NW_OLD_ITEMS || [];
                 if (old.length) old.forEach(it => addRow(it));
                 else addRow();

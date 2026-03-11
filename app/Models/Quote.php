@@ -39,9 +39,16 @@ class Quote extends Model
         return $this->belongsTo(Deal::class);
     }
 
+    /**
+     * IMPORTANT:
+     * - Keep belongsTo() clean (NO whereColumn('companies.tenant_id','quotes.tenant_id') etc.)
+     * - Tenant safety should be enforced in controllers/validation.
+     * - If Company uses SoftDeletes and you want the name to still show, keep withTrashed().
+     */
     public function company()
     {
-        return $this->belongsTo(Company::class);
+        return $this->belongsTo(Company::class)
+            ->withTrashed(); // remove this line if Company does NOT use SoftDeletes
     }
 
     public function contact()

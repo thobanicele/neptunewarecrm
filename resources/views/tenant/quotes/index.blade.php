@@ -168,10 +168,16 @@
                                 </td>
 
                                 <td>
-                                    <a href="{{ tenant_route('tenant.companies.show', $qte->company) }}"
-                                        class="text-decoration-none">
-                                        {{ $qte->company?->name ?? '—' }}
-                                    </a>
+                                    @if ($qte->company)
+                                        <a class="text-decoration-none"
+                                            href="{{ tenant_route('tenant.companies.show', ['company' => $qte->company->id]) }}">
+                                            {{ $qte->company->name }}
+                                        </a>
+                                    @elseif ($qte->company_id)
+                                        <span class="text-danger small">Company missing (#{{ $qte->company_id }})</span>
+                                    @else
+                                        —
+                                    @endif
                                 </td>
 
                                 <td>{{ $qte->contact?->name ?? '—' }}</td>

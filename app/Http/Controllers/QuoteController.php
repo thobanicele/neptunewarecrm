@@ -22,100 +22,95 @@ use App\Services\ActivityLogger;
 
 class QuoteController extends Controller
 {
-    public function index(string $tenantKey, Request $request)
-    {
-        $tenant = app('tenant');
-        $this->authorize('viewAny', Quote::class);
+   public function index(string $tenantKey, Request $request)
+{
+    $tenant = app('tenant');
+    $this->authorize('viewAny', \App\Models\Quote::class);
 
-        $q = trim((string) $request->query('q', ''));
-        $status = $request->query('status');
-        $sales_person_user_id = $request->query('sales_person_user_id');
+    $q = trim((string) $request->query('q', ''));
+    $status = $request->query('status');
+    $sales_person_user_id = $request->query('sales_person_user_id');
 
-        // sorting
-        $sort = (string) $request->query('sort', 'updated_at');
-        $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+    $sort = (string) $request->query('sort', 'updated_at');
+    $dir  = strtolower((string) $request->query('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
-        // whitelist
-        $allowedSorts = [
-            'quote_number',
-            'status',
-            'subtotal',
-            'total',
-            'created_at',
-            'updated_at',
-            'company',        // relationship sort via subquery
-            'sales_person',   // relationship sort via subquery
-        ];
-        if (!in_array($sort, $allowedSorts, true)) {
-            $sort = 'updated_at';
-        }
-
-        $itemsQuery = Quote::query()
-            ->where('tenant_id', $tenant->id)
-            ->with(['deal', 'company', 'contact', 'salesPerson', 'owner'])
-            ->when($status, fn ($qry) => $qry->where('status', $status))
-            ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
-            ->when($q !== '', function ($qry) use ($q) {
-                $qry->where(function ($x) use ($q) {
-                    $x->where('quote_number', 'like', "%{$q}%")
-                        ->orWhere('notes', 'like', "%{$q}%")
-                        ->orWhereHas('deal', fn ($d) => $d->where('title', 'like', "%{$q}%"))
-                        ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
-                        ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
-                });
-            });
-
-        // Apply sorting
-        $itemsQuery = match ($sort) {
-            'company' => $itemsQuery->orderBy(
-                \App\Models\Company::select('name')
-                    ->whereColumn('companies.id', 'quotes.company_id'),
-                $dir
-            ),
-            'sales_person' => $itemsQuery->orderBy(
-                \App\Models\User::select('name')
-                    ->whereColumn('users.id', 'quotes.sales_person_user_id'),
-                $dir
-            ),
-            default => $itemsQuery->orderBy($sort, $dir),
-        };
-
-        $brands = Brand::query()
-            ->where('tenant_id', $tenant->id)
-            ->orderBy('name')
-            ->get(['id','name']);
-
-        $categories = Category::query()
-            ->where('tenant_id', $tenant->id)
-            ->orderBy('name')
-            ->get(['id','name']);
-
-        // Stable secondary sort
-        $items = $itemsQuery
-            ->orderByDesc('id')
-            ->paginate(15)
-            ->withQueryString();
-
-        $salesPeople = User::query()
-            ->where('tenant_id', $tenant->id)
-            ->orderBy('name')
-            ->get(['id', 'name']);
-
-        // Feature flag (make sure key matches your plan config)
-        $canExport = tenant_feature($tenant, 'export');
-
-        return view('tenant.quotes.index', compact(
-            'tenant',
-            'items',
-            'salesPeople',
-            'q',
-            'status',
-            'sales_person_user_id',
-            'sort',
-            'dir',
-            'canExport'
-        ));
+    $allowedSorts = [
+        'quote_number','status','subtotal','total','created_at','updated_at',
+        'company','sales_person',
+    ];
+    if (!in_array($sort, $allowedSorts, true)) {
+        $sort = 'updated_at';
     }
+
+    $itemsQuery = \App\Models\Quote::query()
+        ->where('tenant_id', $tenant->id)
+        ->with([
+            'deal',
+            // eager load company (including trashed if Company soft deletes)
+            'company' => function ($q) {
+                $q->select('id', 'tenant_id', 'name');
+                if (method_exists($q->getModel(), 'trashed')) {
+                    $q->withTrashed();
+                }
+            },
+            'contact',
+            'salesPerson',
+            'owner',
+        ])
+        ->when($status, fn ($qry) => $qry->where('status', $status))
+        ->when($sales_person_user_id, fn ($qry) => $qry->where('sales_person_user_id', $sales_person_user_id))
+        ->when($q !== '', function ($qry) use ($q) {
+            $qry->where(function ($x) use ($q) {
+                $x->where('quote_number', 'like', "%{$q}%")
+                    ->orWhere('notes', 'like', "%{$q}%")
+                    ->orWhereHas('deal', fn ($d) => $d->where('title', 'like', "%{$q}%"))
+                    ->orWhereHas('company', fn ($c) => $c->where('name', 'like', "%{$q}%"))
+                    ->orWhereHas('contact', fn ($c) => $c->where('name', 'like', "%{$q}%"));
+            });
+        });
+
+    // sorting via subqueries (safe)
+    if ($sort === 'company') {
+        $itemsQuery->orderBy(
+            \App\Models\Company::select('name')
+                ->whereColumn('companies.id', 'quotes.company_id')
+                ->whereColumn('companies.tenant_id', 'quotes.tenant_id'),
+            $dir
+        );
+    } elseif ($sort === 'sales_person') {
+        $itemsQuery->orderBy(
+            \App\Models\User::select('name')
+                ->whereColumn('users.id', 'quotes.sales_person_user_id'),
+            $dir
+        );
+    } else {
+        $itemsQuery->orderBy($sort, $dir);
+    }
+
+    $items = $itemsQuery
+        ->orderByDesc('id')
+        ->paginate(15)
+        ->withQueryString();
+
+    $salesPeople = \App\Models\User::query()
+        ->where('tenant_id', $tenant->id)
+        ->orderBy('name')
+        ->get(['id', 'name']);
+
+    $canExport = tenant_feature($tenant, 'export');
+
+    return view('tenant.quotes.index', compact(
+        'tenant',
+        'items',
+        'salesPeople',
+        'q',
+        'status',
+        'sales_person_user_id',
+        'sort',
+        'dir',
+        'canExport'
+    ));
+}
 
     public function create(Request $request, string $tenantKey)
     {
@@ -378,24 +373,17 @@ class QuoteController extends Controller
                 $sku  = $i['sku'] ?? null;
                 $unit = $i['unit'] ?? null;
 
-                $name      = $i['name'];
+                $name      = trim((string) ($i['name'] ?? ''));
                 $desc      = $i['description'] ?? null;
                 $unitPrice = (float) $i['unit_price'];
 
                 $discountPct = isset($i['discount_pct']) ? (float) $i['discount_pct'] : 0.0;
                 $discountPct = max(0.0, min(100.0, $discountPct));
 
-                // If product selected (including created via modal), snap from product as source of truth
+                // Option A: validate linked product only, do not overwrite captured snapshot values
                 if ($productId) {
                     $p = $productsById->get($productId);
                     abort_unless($p, 404);
-
-                    $sku  = $p->sku;
-                    $unit = $p->unit;
-
-                    $name      = $p->name;
-                    $desc      = $p->description;
-                    $unitPrice = (float) $p->unit_rate;
                 }
 
                 $grossLine = round($qty * $unitPrice, 2);
@@ -716,7 +704,6 @@ class QuoteController extends Controller
             $taxTotal      = 0.0;
 
             foreach (array_values($data['items']) as $pos => $i) {
-
                 $qty       = (float) $i['qty'];
                 $productId = !empty($i['product_id']) ? (int) $i['product_id'] : null;
                 $taxTypeId = !empty($i['tax_type_id']) ? (int) $i['tax_type_id'] : $defaultTaxTypeId;
@@ -724,23 +711,17 @@ class QuoteController extends Controller
                 $sku  = $i['sku'] ?? null;
                 $unit = $i['unit'] ?? null;
 
-                $name      = $i['name'];
+                $name      = trim((string) ($i['name'] ?? ''));
                 $desc      = $i['description'] ?? null;
                 $unitPrice = (float) $i['unit_price'];
 
                 $discountPct = isset($i['discount_pct']) ? (float) $i['discount_pct'] : 0.0;
                 $discountPct = max(0.0, min(100.0, $discountPct));
 
+                // Option A: validate linked product only, do not overwrite captured snapshot values
                 if ($productId) {
                     $p = $productsById->get($productId);
                     if (!$p) abort(404);
-
-                    $sku  = $p->sku;
-                    $unit = $p->unit;
-
-                    $name      = $p->name;
-                    $desc      = $p->description;
-                    $unitPrice = (float) $p->unit_rate;
                 }
 
                 $grossLine = round($qty * $unitPrice, 2);

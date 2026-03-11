@@ -30,12 +30,6 @@
             margin: 0;
         }
 
-        .box {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 12px;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -70,6 +64,10 @@
             text-align: center;
         }
 
+        .items {
+            table-layout: fixed;
+        }
+
         .items thead th {
             background: #111827;
             color: #fff;
@@ -82,6 +80,20 @@
 
         .items tbody td {
             border-bottom: 1px solid #e5e7eb;
+        }
+
+        .num {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .unit-col {
+            white-space: nowrap;
+        }
+
+        .desc-col {
+            word-wrap: break-word;
+            word-break: break-word;
         }
 
         .sig-line {
@@ -128,15 +140,11 @@
         $logoPath = $tenant->logo_path ? public_path('storage/' . $tenant->logo_path) : null;
         $hasLogo = $logoPath && file_exists($logoPath);
 
-        // --- Tenant (issuer) info
         $tenantAddress = trim((string) ($tenant->address ?? ''));
         $tenantVatNo = trim((string) ($tenant->vat_number ?? ''));
         $bankDetails = trim((string) ($tenant->bank_details ?? ''));
 
-        // --- Company + addresses (from company_addresses table)
         $company = $quote->company;
-
-        // Ensure we have a Collection (works even if relationship not eager loaded)
         $addrCol = $company?->addresses ?? collect();
 
         $billingAddrModel = $addrCol
@@ -151,11 +159,9 @@
             ->sortByDesc('id')
             ->first();
 
-        // Build display strings using your formatter
         $billingFromTable = trim((string) ($billingAddrModel?->toSnapshotString() ?? ''));
         $shippingFromTable = trim((string) ($shippingAddrModel?->toSnapshotString() ?? ''));
 
-        // Fallbacks (legacy company fields if address table is empty)
         $billingFallback = trim((string) ($company?->billing_address ?: $company?->address ?: ''));
         $shippingFallback = trim((string) ($company?->shipping_address ?: $company?->address ?: ''));
 
@@ -164,14 +170,14 @@
 
         $paymentTerms = trim((string) ($company?->payment_terms ?? ''));
 
-        // Totals
-        $sub = round($quote->items->sum(fn($i) => (float) $i->line_total), 2);
-        $vat = round($quote->items->sum(fn($i) => (float) $i->tax_amount), 2);
-        $grand = round($sub + $vat, 2);
+        // Use saved quote header snapshots
+        $sub = (float) ($quote->subtotal ?? 0);
+        $discount = (float) ($quote->discount_amount ?? 0);
+        $vat = (float) ($quote->tax_amount ?? 0);
+        $grand = (float) ($quote->total ?? 0);
 
-        // Optional: show VAT label from first item if you store it there
         $taxName = $quote->items->firstWhere('tax_name')?->tax_name ?? 'VAT';
-        $taxRate = $quote->items->firstWhere('tax_rate')?->tax_rate;
+        $taxRate = $quote->items->firstWhere('tax_name')?->tax_rate;
     @endphp
 
     {{-- HEADER --}}
@@ -199,6 +205,9 @@
                         <td class="value">{{ $quote->valid_until?->format('d/m/Y') ?? '—' }}</td>
                     </tr>
                     <tr>
+                        <td class="label small">Reference :</td>
+                        <td class="value">{{ $quote->reference ?? '—' }}</td>
+                    <tr>
                         <td class="label small">Sales person :</td>
                         <td class="right">{{ $quote->salesPerson?->name ?? '—' }}</td>
                     </tr>
@@ -210,8 +219,8 @@
     {{-- BILL TO / SHIP TO --}}
     <table style="margin-top:24px; table-layout:fixed;">
         <tr>
-            <td style="width:50%; padding-right:10px;">
-                <div class="box">
+            <td style="width:50%; padding-right:18px;">
+                <div>
                     <div class="label-title">Bill To</div>
 
                     <div style="margin-top:4px; font-weight:700; color:#2563eb;">
@@ -230,19 +239,12 @@
                     @if ($company?->vat_number)
                         <div class="small muted mt-6">VAT Number: {{ $company->vat_number }}</div>
                     @endif
-
-                    <div class="small muted mt-6"><b>Payment Terms:</b> {{ $paymentTerms ?: '—' }}</div>
                 </div>
             </td>
 
-            <td style="width:50%; padding-left:10px;">
-                <div class="box">
+            <td style="width:50%; padding-left:18px;">
+                <div>
                     <div class="label-title">Ship To</div>
-
-                    <div style="margin-top:4px; font-weight:700;">
-                        {{ $company?->name ?? '—' }}
-                    </div>
-
                     <div class="small muted mt-10" style="font-weight:700;">Delivery Address:</div>
                     <div class="pre">{{ $shipping ?: '—' }}</div>
                 </div>
@@ -255,30 +257,34 @@
         <table class="items">
             <thead>
                 <tr>
-                    <th style="width:4%;" class="center">#</th>
-                    <th style="width:46%;">Item &amp; Description</th>
+                    <th style="width:5%;" class="center">#</th>
+                    <th style="width:43%;">Item &amp; Description</th>
                     <th style="width:10%;">Unit</th>
-                    <th style="width:8%;" class="right">Qty</th>
-                    <th style="width:11%;" class="right">Rate</th>
-                    <th style="width:11%;" class="right">Amount</th>
+                    <th style="width:10%;" class="right">Qty</th>
+                    <th style="width:16%;" class="right">Rate</th>
+                    <th style="width:16%;" class="right">Amount</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($quote->items as $idx => $it)
-                    @php $line = (float) $it->line_total; @endphp
+                    @php
+                        $line = (float) $it->line_total;
+                    @endphp
                     <tr>
                         <td class="center">{{ $idx + 1 }}</td>
-                        <td>
+
+                        <td class="desc-col">
                             <div style="font-weight:400;">{{ $it->name }}</div>
                             <div class="small muted mt-6">{{ $it->sku ?: '—' }}</div>
                             @if ($it->description)
                                 <div class="small muted mt-6">{{ $it->description }}</div>
                             @endif
                         </td>
-                        <td>{{ $it->unit ?: '—' }}</td>
-                        <td class="right">{{ number_format((float) $it->qty, 2) }}</td>
-                        <td class="right">{{ $money((float) $it->unit_price) }}</td>
-                        <td class="right">{{ $money($line) }}</td>
+
+                        <td class="unit-col">{{ $it->unit ?: '—' }}</td>
+                        <td class="num">{{ number_format((float) $it->qty, 2) }}</td>
+                        <td class="num">{{ $money((float) $it->unit_price) }}</td>
+                        <td class="num">{{ $money($line) }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -293,22 +299,38 @@
                 <table style="width:100%; border-collapse:collapse;">
                     <tr>
                         <td style="padding:10px 12px; text-align:left; color:#6b7280;">Sub Total</td>
-                        <td style="padding:10px 12px; text-align:right; font-weight:700;">{{ $money($sub) }}</td>
+                        <td style="padding:10px 12px; text-align:right; font-weight:700; white-space:nowrap;">
+                            {{ $money($sub) }}
+                        </td>
                     </tr>
+
+                    @if ($discount > 0)
+                        <tr>
+                            <td style="padding:10px 12px; text-align:left; color:#6b7280;">Discount</td>
+                            <td style="padding:10px 12px; text-align:right; font-weight:700; white-space:nowrap;">
+                                - {{ $money($discount) }}
+                            </td>
+                        </tr>
+                    @endif
 
                     <tr>
                         <td style="padding:10px 12px; text-align:left; color:#6b7280;">
-                            {{ $taxName }}@if ($taxRate !== null)
+                            {{ $taxName }}
+                            @if ($taxRate !== null)
                                 ({{ number_format((float) $taxRate, 2) }}%)
                             @endif
                         </td>
-                        <td style="padding:10px 12px; text-align:right; font-weight:700;">{{ $money($vat) }}</td>
+                        <td style="padding:10px 12px; text-align:right; font-weight:700; white-space:nowrap;">
+                            {{ $money($vat) }}
+                        </td>
                     </tr>
 
                     <tr>
                         <td style="padding:12px; text-align:left; font-weight:800; background:#f3f4f6;">Total</td>
-                        <td style="padding:12px; text-align:right; font-weight:900; background:#f3f4f6;">
-                            {{ $money($grand) }}</td>
+                        <td
+                            style="padding:12px; text-align:right; font-weight:900; background:#f3f4f6; white-space:nowrap;">
+                            {{ $money($grand) }}
+                        </td>
                     </tr>
                 </table>
             </td>

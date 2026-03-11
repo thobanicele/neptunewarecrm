@@ -7,11 +7,17 @@ use Illuminate\Http\Request;
 
 class Select2Controller extends Controller
 {
+    
     protected function cfg(string $resource): array
     {
-        $cfg = config("select2.resources.$resource");
+        $resource = trim((string) $resource);
+        $resources = config('select2.resources', []);
+        
+        $cfg = $resources[$resource] ?? null;
+
         abort_unless(is_array($cfg), 404, 'Unknown Select2 resource');
         abort_unless(!empty($cfg['model']), 500, 'Select2 resource misconfigured');
+
         return $cfg;
     }
 
@@ -86,8 +92,25 @@ class Select2Controller extends Controller
                 }
             });
         }
-
+        \Log::debug('select2 search', [
+            'resource' => $resource,
+            'model' => $model,
+            'tenant_id' => $tenant?->id,
+            'q' => $q,
+            'order_by' => $orderBy,
+            'where' => $where,
+        ]);
+        dd([
+    'resource' => $resource,
+    'tenant_id' => $tenant?->id,
+    'q' => $q,
+    'tenant_column' => $tenantCol,
+    'where' => $where,
+    'count' => (clone $query)->count(),
+    'rows' => (clone $query)->orderBy($orderBy)->limit(10)->get()->toArray(),
+]);
         $p = $query->orderBy($orderBy)
+        
             ->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([

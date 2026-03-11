@@ -23,22 +23,21 @@
             text-align: right;
         }
 
+        .center {
+            text-align: center;
+        }
+
         .nowrap {
             white-space: nowrap;
         }
 
         .wrap {
             word-wrap: break-word;
+            word-break: break-word;
         }
 
         .pre {
             white-space: pre-wrap;
-        }
-
-        .box {
-            border: 1px solid rgba(0, 0, 0, .12);
-            border-radius: 8px;
-            padding: 10px;
         }
 
         .title {
@@ -81,6 +80,20 @@
             vertical-align: top;
         }
 
+        .desc-col {
+            word-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .unit-col {
+            white-space: nowrap;
+        }
+
+        .num {
+            text-align: right;
+            white-space: nowrap;
+        }
+
         .sku {
             font-size: 10px;
             color: #6c757d;
@@ -112,7 +125,6 @@
 
 <body>
     @php
-        // Totals from invoice header
         $subGross = round((float) ($invoice->subtotal ?? 0), 2);
         $discount = round((float) ($invoice->discount_amount ?? 0), 2);
         $vat = round((float) ($invoice->tax_amount ?? 0), 2);
@@ -134,11 +146,9 @@
             }
         };
 
-        // People
         $salesPersonName = optional($invoice->salesPerson ?? null)->name ?? '—';
-        $ownerName = optional($invoice->owner ?? null)->name ?? '—';
+       
 
-        // --- Address helpers ---
         $formatAddress = function ($addr) {
             if (!$addr) {
                 return '';
@@ -147,44 +157,45 @@
                 return trim($addr);
             }
 
-            // If it's a model/array with common fields
-    $get = fn($k) => data_get($addr, $k);
+            $get = fn($k) => data_get($addr, $k);
 
-    $parts = array_filter([
-        $get('label'),
-        $get('attention'),
-        $get('line1'),
-        $get('line2'),
-        $get('city'),
-        $get('subdivision_text') ?: optional($get('subdivision'))->name ?? null,
-        $get('postal_code'),
-        optional($get('country'))->name ?? ($get('country') ?? null),
-    ]);
+            $parts = array_filter([
+                $get('label'),
+                $get('attention'),
+                $get('line1'),
+                $get('line2'),
+                $get('city'),
+                $get('subdivision_text') ?: optional($get('subdivision'))->name ?? null,
+                $get('postal_code'),
+                optional($get('country'))->name ?? ($get('country') ?? null),
+            ]);
 
-    return trim(implode("\n", $parts));
-};
+            return trim(implode("\n", $parts));
+        };
 
-// If controller passed $billTo/$shipTo, prefer those.
-// Otherwise fall back to company addresses if they exist.
-$billToText = isset($billTo) && trim((string) $billTo) !== '' ? trim((string) $billTo) : '';
-$shipToText = isset($shipTo) && trim((string) $shipTo) !== '' ? trim((string) $shipTo) : '';
+        $billToText = isset($billTo) && trim((string) $billTo) !== '' ? trim((string) $billTo) : '';
+        $shipToText = isset($shipTo) && trim((string) $shipTo) !== '' ? trim((string) $shipTo) : '';
 
-// Fallback (CompanyAddress model pattern)
-if (!$billToText && $invoice->company && method_exists($invoice->company, 'addresses')) {
-    $billing =
-        $invoice->company->addresses->firstWhere('is_default_billing', 1) ??
-        ($invoice->company->addresses->firstWhere('type', 'billing') ?? $invoice->company->addresses->first());
+        if (!$billToText && $invoice->company && method_exists($invoice->company, 'addresses')) {
+            $billing =
+                $invoice->company->addresses->firstWhere('is_default_billing', 1) ??
+                ($invoice->company->addresses->firstWhere('type', 'billing') ?? $invoice->company->addresses->first());
 
-    $billToText = $formatAddress($billing);
-}
+            $billToText = $formatAddress($billing);
+        }
 
-if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addresses')) {
-    $shipping =
-        $invoice->company->addresses->firstWhere('is_default_shipping', 1) ??
-        ($invoice->company->addresses->firstWhere('type', 'shipping') ?? $invoice->company->addresses->first());
+        if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addresses')) {
+            $shipping =
+                $invoice->company->addresses->firstWhere('is_default_shipping', 1) ??
+                ($invoice->company->addresses->firstWhere('type', 'shipping') ?? $invoice->company->addresses->first());
 
             $shipToText = $formatAddress($shipping);
         }
+
+        $paymentsApplied = (float) ($paymentsApplied ?? 0);
+        $creditsApplied = (float) ($creditsApplied ?? 0);
+        $appliedLine = $paymentsApplied + $creditsApplied;
+        $balanceDue = (float) ($balanceDue ?? max(0, ((float) $grand) - $appliedLine));
     @endphp
 
     {{-- HEADER --}}
@@ -246,10 +257,7 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                         <td class="muted right" style="padding:2px 10px 2px 0;">Sales Person:</td>
                         <td class="nowrap"><strong>{{ $salesPersonName }}</strong></td>
                     </tr>
-                    <tr>
-                        <td class="muted right" style="padding:2px 10px 2px 0;">Owner:</td>
-                        <td class="nowrap"><strong>{{ $ownerName }}</strong></td>
-                    </tr>
+                    
                 </table>
             </td>
         </tr>
@@ -258,10 +266,10 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
     <div class="hr"></div>
 
     {{-- BILL/SHIP --}}
-    <table width="100%">
+    <table width="100%" style="margin-top:14px; table-layout:fixed;">
         <tr>
-            <td width="50%" valign="top" style="padding-right:8px;">
-                <div class="box">
+            <td width="50%" valign="top" style="padding-right:18px;">
+                <div>
                     <div class="muted"
                         style="font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">Bill To
                     </div>
@@ -294,8 +302,8 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                 </div>
             </td>
 
-            <td width="50%" valign="top" style="padding-left:8px;">
-                <div class="box">
+            <td width="50%" valign="top" style="padding-left:18px;">
+                <div>
                     <div class="muted"
                         style="font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">Ship To
                     </div>
@@ -312,24 +320,15 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
 
     {{-- ITEMS --}}
     <table class="items">
-        <colgroup>
-            <col style="width:30px;">
-            <col style="width:auto;">
-            <col style="width:60px;">
-            <col style="width:60px;">
-            <col style="width:90px;">
-            <col style="width:90px;">
-            <col style="width:100px;">
-        </colgroup>
         <thead>
             <tr>
-                <th>#</th>
-                <th>Item &amp; Description</th>
-                <th class="right">Unit</th>
-                <th class="right">Qty</th>
-                <th class="right">Rate</th>
-                <th class="right">VAT</th>
-                <th class="right">Amount</th>
+                <th style="width:5%;">#</th>
+                <th style="width:39%;">Item &amp; Description</th>
+                <th style="width:10%;" class="right">Unit</th>
+                <th style="width:10%;" class="right">Qty</th>
+                <th style="width:12%;" class="right">Rate</th>
+                <th style="width:12%;" class="right">VAT</th>
+                <th style="width:12%;" class="right">Amount</th>
             </tr>
         </thead>
         <tbody>
@@ -340,8 +339,9 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                     $incl = $line + $lineVat;
                 @endphp
                 <tr>
-                    <td class="right nowrap">{{ $idx + 1 }}</td>
-                    <td class="wrap">
+                    <td class="num">{{ $idx + 1 }}</td>
+
+                    <td class="desc-col">
                         <div style="font-weight:800;">{{ $it->name }}</div>
                         @if (!empty($it->sku))
                             <div class="sku">SKU: {{ $it->sku }}</div>
@@ -350,24 +350,18 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                             <div class="muted" style="margin-top:4px;">{{ $it->description }}</div>
                         @endif
                     </td>
-                    <td class="right nowrap">{{ $it->unit ?? '—' }}</td>
-                    <td class="right nowrap">{{ number_format((float) $it->qty, 2) }}</td>
-                    <td class="right nowrap">{{ $money((float) $it->unit_price) }}</td>
-                    <td class="right nowrap">{{ $money($lineVat) }}</td>
-                    <td class="right nowrap"><strong>{{ $money($incl) }}</strong></td>
+
+                    <td class="unit-col num">{{ $it->unit ?? '—' }}</td>
+                    <td class="num">{{ number_format((float) $it->qty, 2) }}</td>
+                    <td class="num">{{ $money((float) $it->unit_price) }}</td>
+                    <td class="num">{{ $money($lineVat) }}</td>
+                    <td class="num"><strong>{{ $money($incl) }}</strong></td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     {{-- TOTALS --}}
-    @php
-        $paymentsApplied = (float) ($paymentsApplied ?? 0);
-        $creditsApplied = (float) ($creditsApplied ?? 0);
-        $appliedLine = $paymentsApplied + $creditsApplied; // combined
-        $balanceDue = (float) ($balanceDue ?? max(0, ((float) $grand) - $appliedLine));
-    @endphp
-
     <table width="100%" style="margin-top:12px;">
         <tr>
             <td></td>
@@ -397,39 +391,27 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
                         <td class="right nowrap">{{ $money($grand) }}</td>
                     </tr>
 
-                    {{-- NEW: Payments/Credits line (combined, red, negative) --}}
                     <tr>
-                        <td classs="label right">Payments / Credits</td>
+                        <td class="label right">Payments / Credits</td>
                         <td class="right strong nowrap" style="color:#b00020;">
                             - {{ $money($appliedLine) }}
                         </td>
                     </tr>
 
-                    {{-- NEW: Balance Due --}}
                     <tr class="grand">
                         <td class="right">Balance Due</td>
                         <td class="right nowrap">{{ $money($balanceDue) }}</td>
                     </tr>
-
-                    {{-- Optional small breakdown line --}}
-                    {{-- 
-                <tr>
-                    <td colspan="2" class="right" style="font-size:11px;color:#666;">
-                        Payments: {{ $money($paymentsApplied) }} • Credits: {{ $money($creditsApplied) }}
-                    </td>
-                </tr>
-                --}}
                 </table>
             </td>
         </tr>
     </table>
 
-
     {{-- FOOTER --}}
     <table width="100%" style="margin-top:14px;">
         <tr>
             <td width="50%" valign="top" style="padding-right:8px;">
-                <div class="box">
+                <div>
                     <div class="muted"
                         style="font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">Terms
                         &amp; Conditions</div>
@@ -445,7 +427,7 @@ if (!$shipToText && $invoice->company && method_exists($invoice->company, 'addre
             </td>
 
             <td width="50%" valign="top" style="padding-left:8px;">
-                <div class="box">
+                <div>
                     <div class="muted"
                         style="font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:.4px;">Notes
                     </div>

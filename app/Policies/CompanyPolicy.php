@@ -18,6 +18,7 @@ class CompanyPolicy
     }
     public function delete(User $user, Company $company): bool {
         return $user->can('companies.delete') && (int)$company->tenant_id === (int)$user->tenant_id;
+        return !$company->hasTransactions();
     }
     public function export(User $user): bool { return $user->can('companies.export'); }
     public function statement(User $user): bool { return $user->can('companies.statement'); }

@@ -16,6 +16,7 @@
                         'qty' => (float) $it->qty,
                         'unit_price' => (float) $it->unit_price,
                         'sku' => $it->sku,
+                        'unit' => $it->unit,
                         'discount_pct' => (float) ($it->discount_pct ?? 0),
                     ];
                 })
@@ -33,26 +34,26 @@
                     'qty' => 1,
                     'unit_price' => 0,
                     'sku' => '',
+                    'unit' => '',
                     'discount_pct' => 0,
                 ],
             ];
         }
 
-        // ✅ Fallback companies JSON (if controller doesn't pass $companiesJson)
-$companiesJsonLocal = ($companies ?? collect())
-    ->map(function ($c) {
-        return [
-            'id' => data_get($c, 'id'),
-            'name' => data_get($c, 'name'),
-            'payment_terms' => data_get($c, 'payment_terms'),
-            'vat_treatment' => data_get($c, 'vat_treatment'),
-            'vat_number' => data_get($c, 'vat_number'),
-            'billing_address' => data_get($c, 'billing_address'),
-            'shipping_address' => data_get($c, 'shipping_address'),
-            'address' => data_get($c, 'address'),
-        ];
-    })
-    ->keyBy('id');
+        $companiesJsonLocal = ($companies ?? collect())
+            ->map(function ($c) {
+                return [
+                    'id' => data_get($c, 'id'),
+                    'name' => data_get($c, 'name'),
+                    'payment_terms' => data_get($c, 'payment_terms'),
+                    'vat_treatment' => data_get($c, 'vat_treatment'),
+                    'vat_number' => data_get($c, 'vat_number'),
+                    'billing_address' => data_get($c, 'billing_address'),
+                    'shipping_address' => data_get($c, 'shipping_address'),
+                    'address' => data_get($c, 'address'),
+                ];
+            })
+            ->keyBy('id');
     @endphp
 
     <div class="container-fluid py-4">
@@ -82,11 +83,9 @@ $companiesJsonLocal = ($companies ?? collect())
             @csrf
             @method('PUT')
 
-            {{-- TOP: Proposal Header + Customer Details --}}
             <div class="card mb-3">
                 <div class="card-body">
 
-                    {{-- Header row: Logo + quote meta --}}
                     <div class="row g-3 align-items-start">
                         <div class="col-12 col-lg-6">
                             @include('tenant.partials.transaction-header-brand', [
@@ -167,7 +166,6 @@ $companiesJsonLocal = ($companies ?? collect())
 
                     <hr class="my-3">
 
-                    {{-- Customer select --}}
                     <div class="row g-3">
                         <div class="col-12 col-lg-8">
                             <label class="form-label">Customer Name <span class="text-danger">*</span></label>
@@ -195,7 +193,6 @@ $companiesJsonLocal = ($companies ?? collect())
                         </div>
                     </div>
 
-                    {{-- Quote To / Ship To --}}
                     <div class="row g-3 mt-2">
                         <div class="col-12 col-lg-6">
                             <div class="d-flex justify-content-between align-items-center mb-1">
@@ -222,7 +219,6 @@ $companiesJsonLocal = ($companies ?? collect())
 
                     <hr class="my-3">
 
-                    {{-- Default VAT (for new rows) --}}
                     <div class="row g-3">
                         <div class="col-12 col-lg-4">
                             <label class="form-label">Default VAT</label>
@@ -241,7 +237,6 @@ $companiesJsonLocal = ($companies ?? collect())
                 </div>
             </div>
 
-            {{-- ITEMS TABLE --}}
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <div class="fw-semibold">Items</div>
@@ -333,7 +328,6 @@ $companiesJsonLocal = ($companies ?? collect())
         </form>
     </div>
 
-    {{-- ✅ Reusable Quick Add Product Modal (supports Brand + Category) --}}
     @include('tenant.products.partials.quick_add_modal', [
         'taxTypes' => $taxTypes ?? collect(),
         'brands' => $brands ?? collect(),
@@ -440,7 +434,6 @@ $companiesJsonLocal = ($companies ?? collect())
             background: rgba(13, 110, 253, .06);
         }
 
-        /* small + button sizing */
         .nw-search-wrap .btn {
             padding: .18rem .45rem;
             line-height: 1;
@@ -450,13 +443,10 @@ $companiesJsonLocal = ($companies ?? collect())
 @endpush
 
 @push('scripts')
-    {{-- ✅ Reusable Quick Add Product scripts partial (ONLY SOURCE OF TRUTH) --}}
     @include('tenant.products.partials.quick_add_modal_scripts')
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-
-            // Global Data
             window.NW_PRODUCTS = @json(($products ?? collect())->keyBy('id'));
             window.NW_TAXTYPES = @json(($taxTypes ?? collect())->keyBy('id'));
             window.NW_COMPANIES = @json($companiesJson ?? $companiesJsonLocal);
@@ -464,7 +454,6 @@ $companiesJsonLocal = ($companies ?? collect())
             window.NW_CAN_CREATE_PRODUCT = @json(auth()->user()?->can('products.create'));
 
             (function() {
-
                 const itemsBody = document.getElementById('itemsBody');
                 const addBtn = document.getElementById('addItemBtn');
                 const defaultTaxType = document.getElementById('defaultTaxType');
@@ -472,6 +461,15 @@ $companiesJsonLocal = ($companies ?? collect())
                 if (!itemsBody) {
                     console.error('[NW Quotes] #itemsBody not found. Script cannot init.');
                     return;
+                }
+
+                function escapeHtml(value) {
+                    return String(value ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
                 }
 
                 function money(n) {
@@ -483,7 +481,7 @@ $companiesJsonLocal = ($companies ?? collect())
                 }
 
                 function nl2br(s) {
-                    return (s || '').replace(/\n/g, '<br>');
+                    return escapeHtml(s || '').replace(/\n/g, '<br>');
                 }
 
                 function clamp(n, min, max) {
@@ -496,7 +494,6 @@ $companiesJsonLocal = ($companies ?? collect())
                     return (p.unit_rate ?? p.unit_price ?? p.price ?? p.selling_price ?? 0);
                 }
 
-                // Company blocks
                 const companySelect = document.getElementById('companySelect');
                 const billingBox = document.getElementById('billingBox');
                 const shippingBox = document.getElementById('shippingBox');
@@ -536,12 +533,10 @@ $companiesJsonLocal = ($companies ?? collect())
                 companySelect?.addEventListener('change', refreshCompanyBlocks);
                 refreshCompanyBlocks();
 
-                // Data
                 const RAW_PRODUCTS_OBJ = window.NW_PRODUCTS || {};
                 const PRODUCTS = Object.values(RAW_PRODUCTS_OBJ);
                 const TAXTYPES = window.NW_TAXTYPES || {};
 
-                // Global dropdown appended to body
                 const globalSuggest = document.createElement('div');
                 globalSuggest.className = 'nw-suggest';
                 document.body.appendChild(globalSuggest);
@@ -567,7 +562,6 @@ $companiesJsonLocal = ($companies ?? collect())
                     activeInput = null;
                 }
 
-                // ✅ Reposition dropdown on scroll/resize (do NOT close)
                 function repositionSuggest() {
                     if (globalSuggest.style.display !== 'block') return;
                     if (!activeInput) return;
@@ -589,14 +583,12 @@ $companiesJsonLocal = ($companies ?? collect())
                 window.addEventListener('scroll', repositionSuggest, true);
                 window.addEventListener('resize', repositionSuggest);
 
-                // Close when clicking outside
                 document.addEventListener('click', (e) => {
                     if (e.target.closest('.nw-picker')) return;
                     if (e.target.closest('.nw-suggest')) return;
                     closeSuggest();
                 });
 
-                // Search scoring
                 function scoreMatch(p, term) {
                     const t = (term || '').toLowerCase().trim();
                     if (!t) return -1;
@@ -635,7 +627,7 @@ $companiesJsonLocal = ($companies ?? collect())
                     Object.values(TAXTYPES).forEach(t => {
                         const sel = String(t.id) === String(selectedId) ? 'selected' : '';
                         html +=
-                            `<option value="${t.id}" ${sel}>${t.name} (${money(parseFloat(t.rate || 0))}%)</option>`;
+                            `<option value="${escapeHtml(t.id)}" ${sel}>${escapeHtml(t.name)} (${money(parseFloat(t.rate || 0))}%)</option>`;
                     });
                     return html;
                 }
@@ -643,14 +635,14 @@ $companiesJsonLocal = ($companies ?? collect())
                 function buildSuggestActionsHtml() {
                     if (!window.NW_CAN_CREATE_PRODUCT) return '';
                     return `
-                <div class="nw-opt nw-opt-action" data-action="create-product">
-                    <div class="nw-name">+ Create new product</div>
-                    <div class="nw-sub">
-                        <span>Add without leaving this quote</span>
-                        <span class="nw-right">Enter ↵</span>
-                    </div>
-                </div>
-            `;
+                        <div class="nw-opt nw-opt-action" data-action="create-product">
+                            <div class="nw-name">+ Create new product</div>
+                            <div class="nw-sub">
+                                <span>Add without leaving this quote</span>
+                                <span class="nw-right">Enter ↵</span>
+                            </div>
+                        </div>
+                    `;
                 }
 
                 function renderTopProducts(inputEl, rowEl) {
@@ -667,11 +659,11 @@ $companiesJsonLocal = ($companies ?? collect())
                         const sub = [p.sku ? `SKU: ${p.sku}` : null, (p.description || '').trim()]
                             .filter(Boolean).join(' • ');
                         return `
-                    <div class="nw-opt" data-id="${p.id}">
-                        <div class="nw-name">${p.name ?? '—'}</div>
-                        <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
-                    </div>
-                `;
+                            <div class="nw-opt" data-id="${escapeHtml(p.id)}">
+                                <div class="nw-name">${escapeHtml(p.name ?? '—')}</div>
+                                <div class="nw-sub">${escapeHtml((sub || '').substring(0, 130))}</div>
+                            </div>
+                        `;
                     }).join('');
 
                     openSuggest(inputEl, rowEl, html + buildSuggestActionsHtml());
@@ -700,6 +692,7 @@ $companiesJsonLocal = ($companies ?? collect())
 
                     row.querySelector('.product_id').value = p.id;
                     row.querySelector('.sku').value = p.sku ?? '';
+                    row.querySelector('.unit').value = p.unit ?? '';
                     row.querySelector('.pickedText').value = `${p.name ?? ''}${p.sku ? ' • ' + p.sku : ''}`;
 
                     row.querySelector('.itemName').value = p.name ?? '';
@@ -713,6 +706,7 @@ $companiesJsonLocal = ($companies ?? collect())
                 function clearProduct(row) {
                     row.querySelector('.product_id').value = '';
                     row.querySelector('.sku').value = '';
+                    row.querySelector('.unit').value = '';
                     row.querySelector('.pickedText').value = '';
                     row.querySelector('.itemName').value = '';
                     row.querySelector('.itemDesc').value = '';
@@ -780,58 +774,59 @@ $companiesJsonLocal = ($companies ?? collect())
                     tr.className = 'quote-item-row';
 
                     tr.innerHTML = `
-                <td>
-                    <div class="nw-picker">
-                        <div class="nw-search-wrap">
-                            <div class="input-group input-group-sm">
-                                <input type="text" class="form-control nw-search"
-                                    placeholder="Click to select or type to search…" autocomplete="off">
-                                <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                        <td>
+                            <div class="nw-picker">
+                                <div class="nw-search-wrap">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control nw-search"
+                                            placeholder="Click to select or type to search…" autocomplete="off">
+                                        <button type="button" class="btn btn-outline-primary nw-add-product" title="Add new product">+</button>
+                                    </div>
+                                </div>
+
+                                <div class="nw-picked">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control pickedText" readonly value="">
+                                        <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
+                                    </div>
+                                </div>
+
+                                <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${escapeHtml(prefill.product_id ?? '')}">
+                                <input type="hidden" class="itemName" name="items[${idx}][name]" value="${escapeHtml(prefill.name ?? '')}">
+                                <input type="hidden" class="unit" name="items[${idx}][unit]" value="${escapeHtml(prefill.unit ?? '')}">
+
+                                <div class="nw-desc-wrap">
+                                    <textarea class="form-control form-control-sm itemDesc"
+                                        name="items[${idx}][description]" rows="2"
+                                        placeholder="Description…">${escapeHtml(prefill.description ?? '')}</textarea>
+                                </div>
                             </div>
-                        </div>
+                        </td>
 
-                        <div class="nw-picked">
-                            <div class="input-group input-group-sm">
-                                <input type="text" class="form-control pickedText" readonly value="">
-                                <button type="button" class="btn btn-outline-danger clearProductBtn" title="Clear">✕</button>
-                            </div>
-                        </div>
+                        <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${escapeHtml(prefill.sku ?? '')}" readonly></td>
 
-                        <input type="hidden" class="product_id" name="items[${idx}][product_id]" value="${prefill.product_id ?? ''}">
-                        <input type="hidden" class="itemName" name="items[${idx}][name]" value="${String(prefill.name ?? '').replace(/"/g,'&quot;')}">
+                        <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
+                            name="items[${idx}][qty]" value="${escapeHtml(prefill.qty ?? 1)}" required></td>
 
-                        <div class="nw-desc-wrap">
-                            <textarea class="form-control form-control-sm itemDesc"
-                                name="items[${idx}][description]" rows="2"
-                                placeholder="Description…">${String(prefill.description ?? '')}</textarea>
-                        </div>
-                    </div>
-                </td>
+                        <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
+                            name="items[${idx}][unit_price]" value="${escapeHtml(prefill.unit_price ?? 0)}" required></td>
 
-                <td><input class="form-control form-control-sm sku" name="items[${idx}][sku]" value="${prefill.sku ?? ''}" readonly></td>
+                        <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
+                            name="items[${idx}][discount_pct]" value="${escapeHtml(prefill.discount_pct ?? 0)}"></td>
 
-                <td><input class="form-control form-control-sm qty" type="number" step="0.01" min="0.01"
-                    name="items[${idx}][qty]" value="${prefill.qty ?? 1}" required></td>
+                        <td>
+                            <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
+                                ${taxOptions(defaultTaxId)}
+                            </select>
+                        </td>
 
-                <td><input class="form-control form-control-sm unit_price" type="number" step="0.01" min="0"
-                    name="items[${idx}][unit_price]" value="${prefill.unit_price ?? 0}" required></td>
+                        <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
+                        <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
 
-                <td><input class="form-control form-control-sm discount_pct" type="number" step="0.01" min="0" max="100"
-                    name="items[${idx}][discount_pct]" value="${prefill.discount_pct ?? 0}"></td>
-
-                <td>
-                    <select class="form-select form-select-sm taxType" name="items[${idx}][tax_type_id]">
-                        ${taxOptions(defaultTaxId)}
-                    </select>
-                </td>
-
-                <td class="text-end nw-amount-col">R <span class="lineExcl">0.00</span></td>
-                <td class="text-end nw-amount-col">R <span class="lineIncl">0.00</span></td>
-
-                <td class="text-end">
-                    <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
-                </td>
-            `;
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger removeItemBtn">×</button>
+                        </td>
+                    `;
 
                     itemsBody.appendChild(tr);
 
@@ -852,11 +847,11 @@ $companiesJsonLocal = ($companies ?? collect())
                                 .filter(Boolean).join(' • ');
 
                             return `
-                        <div class="nw-opt" data-id="${p.id}">
-                            <div class="nw-name">${p.name ?? '—'}</div>
-                            <div class="nw-sub">${(sub || '').substring(0, 130)}</div>
-                        </div>
-                    `;
+                                <div class="nw-opt" data-id="${escapeHtml(p.id)}">
+                                    <div class="nw-name">${escapeHtml(p.name ?? '—')}</div>
+                                    <div class="nw-sub">${escapeHtml((sub || '').substring(0, 130))}</div>
+                                </div>
+                            `;
                         }).join('');
 
                         openSuggest(input, tr, html + buildSuggestActionsHtml());
@@ -897,8 +892,6 @@ $companiesJsonLocal = ($companies ?? collect())
 
                             const action = chosen.getAttribute('data-action');
                             if (action === 'create-product') {
-
-                                // ✅ capture these BEFORE closeSuggest() clears them
                                 const row = activeRow;
                                 const name = (activeInput?.value || '').trim();
                                 const taxTypeId = row?.querySelector('.taxType')?.value || (
@@ -910,7 +903,7 @@ $companiesJsonLocal = ($companies ?? collect())
                                     'function') {
                                     console.error(
                                         '[NW] NWQuickProduct missing. Ensure quick_add_modal_scripts is included before this picker script.'
-                                        );
+                                    );
                                     return;
                                 }
 
@@ -950,19 +943,20 @@ $companiesJsonLocal = ($companies ?? collect())
                         });
                     });
 
-                    if (prefill.product_id) {
-                        applyProduct(tr, prefill.product_id);
+                    if (prefill.product_id || prefill.name || prefill.description || prefill.sku) {
+                        tr.querySelector('.product_id').value = prefill.product_id ?? '';
+                        tr.querySelector('.itemName').value = prefill.name ?? '';
+                        tr.querySelector('.itemDesc').value = prefill.description ?? '';
+                        tr.querySelector('.sku').value = prefill.sku ?? '';
+                        tr.querySelector('.unit').value = prefill.unit ?? '';
+                        tr.querySelector('.qty').value = prefill.qty ?? 1;
+                        tr.querySelector('.unit_price').value = prefill.unit_price ?? 0;
+                        tr.querySelector('.discount_pct').value = prefill.discount_pct ?? 0;
+                        tr.querySelector('.taxType').value = prefill.tax_type_id ?? '';
+                        tr.querySelector('.pickedText').value =
+                            `${prefill.name ?? ''}${prefill.sku ? ' • ' + prefill.sku : ''}`;
 
-                        if (prefill.qty != null) tr.querySelector('.qty').value = prefill.qty;
-                        if (prefill.unit_price != null) tr.querySelector('.unit_price').value = prefill
-                            .unit_price;
-                        if (prefill.discount_pct != null) tr.querySelector('.discount_pct').value = prefill
-                            .discount_pct;
-                        if (prefill.tax_type_id != null) tr.querySelector('.taxType').value = prefill
-                            .tax_type_id;
-                        if (prefill.description != null) tr.querySelector('.itemDesc').value = prefill
-                            .description;
-                        if (prefill.sku != null) tr.querySelector('.sku').value = prefill.sku;
+                        setSelectedUI(tr, true);
                     } else {
                         setSelectedUI(tr, false);
                     }
@@ -970,12 +964,10 @@ $companiesJsonLocal = ($companies ?? collect())
                     recalc();
                 }
 
-                // ✅ Dropdown selection handler (CAPTURE + pointerdown only)
                 function handleSuggestSelect(e) {
                     const opt = e.target.closest('.nw-opt');
                     if (!opt) return;
 
-                    // Only primary button/touch
                     if (e.button != null && e.button !== 0) return;
 
                     e.preventDefault();
@@ -983,8 +975,6 @@ $companiesJsonLocal = ($companies ?? collect())
 
                     const action = opt.getAttribute('data-action');
                     if (action === 'create-product') {
-
-                        // ✅ capture these BEFORE closeSuggest() clears them
                         const row = activeRow;
                         const name = (activeInput?.value || '').trim();
                         const taxTypeId = row?.querySelector('.taxType')?.value || (defaultTaxType?.value ||
@@ -1024,10 +1014,8 @@ $companiesJsonLocal = ($companies ?? collect())
                     }
                 }
 
-                // IMPORTANT: capture=true so it beats document click handlers
                 globalSuggest.addEventListener('pointerdown', handleSuggestSelect, true);
 
-                // Boot rows
                 const old = window.NW_OLD_ITEMS || [];
                 if (old.length) old.forEach(it => addRow(it));
                 else addRow();
@@ -1106,9 +1094,7 @@ $companiesJsonLocal = ($companies ?? collect())
                 });
 
                 recalc();
-
             })();
-
         });
     </script>
 @endpush

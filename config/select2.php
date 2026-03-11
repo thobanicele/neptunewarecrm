@@ -29,8 +29,8 @@ return [
             'model' => \App\Models\Contact::class,
             'tenant_column' => 'tenant_id',
             'id' => 'id',
-            // show "Name — Company" if you want later, for now just name
-            'label' => 'name',
+            'label_fields' => ['name', 'email'],
+            'label_separator' => ' — ',
             'search' => ['name', 'email', 'phone'],
             'order_by' => 'name',
         ],
@@ -54,7 +54,7 @@ return [
             'search' => ['sku', 'name', 'description'],
             'order_by' => 'name',
             // optional default constraints
-            // 'where' => ['is_active' => 1],
+            'where' => ['is_active' => 1],
         ],
 
         'brands' => [
@@ -64,7 +64,7 @@ return [
             'label' => 'name',
             'search' => ['name', 'slug'],
             'order_by' => 'name',
-            // 'where' => ['is_active' => 1],
+            'where' => ['is_active' => 1],
         ],
 
         'categories' => [
@@ -74,7 +74,7 @@ return [
             'label' => 'name',
             'search' => ['name', 'slug'],
             'order_by' => 'name',
-            // 'where' => ['is_active' => 1],
+            'where' => ['is_active' => 1],
         ],
 
         'company_addresses' => [
@@ -126,10 +126,11 @@ return [
             'model' => \App\Models\PaymentTerm::class,
             'tenant_column' => 'tenant_id',
             'id' => 'id',
-            'label' => 'name',
+            'label_fields' => ['name', 'days'],
+            'label_separator' => ' (',
+            'label_suffix' => ' days)',
             'search' => ['name'],
-            'order_by' => 'sort_order',
-            'where' => ['is_active' => 1],
+            'order_by' => 'name',
         ],
     ],
 ];

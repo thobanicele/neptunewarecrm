@@ -70,7 +70,7 @@
             @endforeach
         @endif
 
-        {{-- AJAX mode: we render selected IDs so form posts correctly.
+        {{-- AJAX mode: render selected IDs so form posts correctly.
              JS will replace labels using ajax-show-url. --}}
         @if ($resolvedAjaxUrl && !empty($val))
             @if ($multiple)
@@ -105,20 +105,15 @@
                 }
 
                 async function prefillSelectedFromShowUrl($el, ajaxShowUrl) {
-                    // For AJAX selects, we want selected items to display text, not IDs.
-                    // Works for both single + multiple.
                     const isMultiple = $el.prop('multiple');
                     let current = $el.val();
-
                     if (!current) return;
 
-                    // normalize to array
-                    const ids = isMultiple ? (Array.isArray(current) ? current : [current]) : [current];
+                    const ids = isMultiple ?
+                        (Array.isArray(current) ? current : [current]) : [current];
 
-                    // if no show url, we can't resolve labels
                     if (!ajaxShowUrl) return;
 
-                    // fetch each selected item label
                     const results = [];
                     for (const id of ids) {
                         if (!id) continue;
@@ -129,25 +124,32 @@
 
                     if (!results.length) return;
 
-                    // Ensure options exist with correct text
                     results.forEach(item => {
-                        const exists = $el.find(`option[value="${String(item.id).replace(/"/g, '\\"')}"]`)
-                            .length > 0;
-                        if (!exists) {
-                            const opt = new Option(item.text, item.id, true, true);
-                            $el.append(opt);
+                        const id = String(item.id);
+
+                        let opt = null;
+                        $el.find('option').each(function() {
+                            if (String(this.value) === id) {
+                                opt = this;
+                                return false;
+                            }
+                        });
+
+                        if (!opt) {
+                            $el.append(new Option(item.text, item.id, true, true));
                         } else {
-                            // update label if it was just the ID
-                            $el.find(`option[value="${item.id}"]`).text(item.text).prop('selected', true);
+                            opt.text = item.text;
+                            opt.selected = true;
                         }
                     });
-
-                    $el.trigger('change.select2');
                 }
 
                 function initSelect2(el) {
-                    const $el = $(el);
+                    if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) {
+                        return;
+                    }
 
+                    const $el = window.jQuery(el);
                     if ($el.data('select2')) return;
 
                     const placeholder = $el.data('placeholder') || 'Select...';
@@ -161,15 +163,14 @@
                     const config = {
                         width: '100%',
                         placeholder,
-                        allowClear,
-                        theme: 'default'
+                        allowClear
                     };
 
                     if (ajaxUrl) {
                         config.ajax = {
                             url: ajaxUrl,
                             dataType: 'json',
-                            delay: delay,
+                            delay,
                             data: function(params) {
                                 return {
                                     q: params.term || '',
@@ -198,25 +199,24 @@
                         config.minimumInputLength = minInput;
                     }
 
-                    // If AJAX mode + we have selected IDs already, resolve labels first (best UX)
-                    // Then init select2.
+                    $el.select2(config);
+
                     if (ajaxUrl && ajaxShowUrl && $el.val()) {
                         prefillSelectedFromShowUrl($el, ajaxShowUrl)
-                            .finally(() => $el.select2(config));
-                    } else {
-                        $el.select2(config);
+                            .finally(() => $el.trigger('change'));
                     }
                 }
 
-                function boot() {
-                    document.querySelectorAll('.js-select2').forEach(initSelect2);
+                function boot(container) {
+                    (container || document).querySelectorAll('.js-select2').forEach(el => initSelect2(el));
                 }
 
-                document.addEventListener('DOMContentLoaded', boot);
+                document.addEventListener('DOMContentLoaded', function() {
+                    boot(document);
+                });
 
-                // If you ever load partials via AJAX/modal later, call window.initSelect2(container)
                 window.initSelect2 = function(container) {
-                    (container || document).querySelectorAll('.js-select2').forEach(initSelect2);
+                    boot(container || document);
                 };
             })
             ();

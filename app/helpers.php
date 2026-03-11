@@ -2,6 +2,8 @@
 
 use App\Models\Tenant;
 use App\Support\TenantPlan;
+use Illuminate\Contracts\Routing\UrlRoutable;
+use Illuminate\Support\Facades\Route;
 
 if (! function_exists('tenant')) {
     function tenant(): ?Tenant
@@ -11,30 +13,42 @@ if (! function_exists('tenant')) {
 }
 
 if (! function_exists('tenant_route')) {
-    function tenant_route(string $name, $params = [], bool $absolute = true)
+    function tenant_route(string $name, $params = [], bool $absolute = true): string
     {
-        $t = tenant();
+        $t = app()->bound('tenant') ? app('tenant') : null;
 
-        // If tenant not bound, avoid crashing on tenant routes
-        if (! $t) return '#';
+        if (! $t) {
+            // fallback to normal route if tenant not bound
+            return route($name, is_array($params) ? $params : [], $absolute);
+        }
 
-        // If user passed a Model or scalar, infer the parameter name from the named route
-        if (! is_array($params)) {
-            $route = app('router')->getRoutes()->getByName($name);
-            $names = $route ? $route->parameterNames() : [];
+        // If a Model/UrlRoutable is passed, infer the param name from the named route
+        if ($params instanceof UrlRoutable) {
+            $route = Route::getRoutes()->getByName($name);
 
-            // remove tenant param
-            $names = array_values(array_filter($names, fn ($n) => $n !== 'tenant'));
+            if ($route) {
+                $paramNames = $route->parameterNames();       // e.g. ['tenant', 'company']
+                $paramNames = array_values(array_diff($paramNames, ['tenant']));
+                $key = $paramNames[0] ?? null;
 
-            // If exactly one non-tenant param exists (company/deal/contact/etc), map to it
-            if (count($names) === 1) {
-                $params = [$names[0] => $params];
+                $params = $key ? [$key => $params] : [];
             } else {
-                $params = []; // fallback
+                $params = [];
             }
         }
 
-        // Always inject tenant subdomain
+        // If scalar is passed (like id), try infer similarly
+        if (! is_array($params)) {
+            $route = Route::getRoutes()->getByName($name);
+            if ($route) {
+                $paramNames = array_values(array_diff($route->parameterNames(), ['tenant']));
+                $key = $paramNames[0] ?? null;
+                $params = $key ? [$key => $params] : [];
+            } else {
+                $params = [];
+            }
+        }
+
         return route($name, array_merge(['tenant' => $t->subdomain], $params), $absolute);
     }
 }

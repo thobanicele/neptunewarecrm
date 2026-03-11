@@ -13,9 +13,10 @@
 
         $ribbonText = strtoupper((string) ($quote->status ?? 'DRAFT'));
 
-        $sub = round($quote->items->sum(fn($i) => (float) $i->line_total), 2);
-        $vat = round($quote->items->sum(fn($i) => (float) $i->tax_amount), 2);
-        $grand = round($sub + $vat, 2);
+        $sub = (float) ($quote->subtotal ?? 0);
+        $discount = (float) ($quote->discount_amount ?? 0);
+        $vat = (float) ($quote->tax_amount ?? 0);
+        $grand = (float) ($quote->total ?? 0);
 
         $currency = 'R';
         $money = fn($n) => $currency . ' ' . number_format((float) $n, 2);
@@ -261,6 +262,13 @@
             <div class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
 
                 <a href="{{ tenant_route('tenant.quotes.index') }}" class="btn btn-light">Back</a>
+                @can('update', $quote)
+                    @if ($st !== 'accepted')
+                        <a href="{{ tenant_route('tenant.quotes.edit', ['quote' => $quote->id]) }}" class="btn btn-outline-dark">
+                            Edit
+                        </a>
+                    @endif
+                @endcan
 
                 @can('pdf', $quote)
                     <a href="{{ tenant_route('tenant.quotes.pdf.stream', ['quote' => $quote->id]) }}" target="_blank"
@@ -403,6 +411,8 @@
                                 <div>Expiry Date :</div>
                                 <div><strong>{{ $quote->valid_until?->format('d/m/Y') ?? '—' }}</strong></div>
 
+                                <div>Reference :</div>
+                                <div><strong>{{ $quote->reference ?? '—' }}</strong></div>
                                 <div>Sales person :</div>
                                 <div><strong>{{ $quote->salesPerson?->name ?? '—' }}</strong></div>
 
@@ -417,7 +427,9 @@
                         <div class="nw-box">
                             <h6>Bill To</h6>
                             <div class="fw-bold" style="color:#2563eb;">
-                                {{ $quote->company?->name ?? '—' }}
+                                <a href="{{ tenant_route('tenant.companies.show', ['company' => $quote->company->id]) }}">
+                                    {{ $quote->company?->name ?? '—' }}
+                                </a>
                             </div>
 
                             @if ($quote->company?->vat_number)
@@ -448,9 +460,6 @@
 
                         <div class="nw-box">
                             <h6>Ship To</h6>
-                            <div class="fw-bold">
-                                {{ $quote->company?->name ?? '—' }}
-                            </div>
 
                             @if ($shipTo)
                                 <div class="nw-pre small" style="margin-top:10px;">{{ $shipTo }}</div>

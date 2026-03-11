@@ -500,20 +500,22 @@ class CompanyController extends Controller
         }, $filename, ['Content-Type' => 'text/csv']);
     }
 
-        public function destroy(Tenant $tenant, Company $company)
-        {
-            $tenant = app('tenant');
-            $this->authorize('delete', $company);
-            // safety: ensure company belongs to tenant from route
-            if ((int) $company->tenant_id !== (int) $tenant->id) {
-                abort(404);
-            }
-    
-            $company->delete();
-    
-            return redirect()->to(tenant_route('tenant.companies.index'))
-                ->with('success', 'Company deleted successfully.');
+    public function destroy(Tenant $tenant, Company $company)
+    {
+        $tenant = app('tenant');
+        $this->authorize('delete', $company);
+
+        if ((int) $company->tenant_id !== (int) $tenant->id) abort(404);
+
+        if ($company->hasTransactions()) {
+            return back()->with('error', 'You cannot delete this company because it has transactions (quotes/invoices/payments/etc).');
         }
+
+        $company->delete();
+
+        return redirect()->to(tenant_route('tenant.companies.index'))
+            ->with('success', 'Company deleted.');
+    }
     
 }
 
