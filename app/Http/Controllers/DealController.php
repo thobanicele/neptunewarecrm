@@ -213,12 +213,11 @@ class DealController extends Controller
 
    
 
-    // ✅ IMPORTANT: tenant param first
-    public function edit(Tenant $tenant, Contact $deal)
+    public function edit(Tenant $tenant, Deal $deal)
     {
         $tenant = app('tenant');
-        $this->authorize('edit', $deal);
-        abort_unless((int)$deal->tenant_id === (int)$tenant->id, 404);
+        $this->authorize('update', $deal);
+        abort_unless((int) $deal->tenant_id === (int) $tenant->id, 404);
 
         $pipeline = Pipeline::where('tenant_id', $tenant->id)
             ->where('id', $deal->pipeline_id)
@@ -226,46 +225,52 @@ class DealController extends Controller
 
         $stages = $pipeline->stages()->orderBy('position')->get();
 
-        return view('tenant.deals.edit', compact('tenant', 'deal', 'pipeline', 'stages'));
+        $companies = Company::where('tenant_id', $tenant->id)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('tenant.deals.edit', compact('tenant', 'deal', 'pipeline', 'stages', 'companies'));
     }
 
     public function update(Request $request, Tenant $tenant, Deal $deal)
-{
-    $tenant = app('tenant');
-    abort_unless((int)$deal->tenant_id === (int)$tenant->id, 404);
+    {
+        $tenant = app('tenant');
+        abort_unless((int)$deal->tenant_id === (int)$tenant->id, 404);
 
-    $data = $request->validate([
-        'title' => ['required','string','max:190'],
-        'amount' => ['nullable','numeric','min:0'],
-        'stage_id' => ['required','integer'],
-        'expected_close_date' => ['nullable','date'],
+        $data = $request->validate([
+            'title' => ['required','string','max:190'],
+            'amount' => ['nullable','numeric','min:0'],
+            'stage_id' => ['required','integer'],
+            'expected_close_date' => ['nullable','date'],
 
-        'company_id' => ['nullable','integer','exists:companies,id'],
-        'primary_contact_id' => ['nullable','integer','exists:contacts,id'],
-    ]);
+            'company_id' => ['nullable','integer','exists:companies,id'],
+            'primary_contact_id' => ['nullable','integer','exists:contacts,id'],
+        ]);
 
-    if (!empty($data['company_id'])) {
-        $ok = \App\Models\Company::where('id', $data['company_id'])->where('tenant_id', $tenant->id)->exists();
-        abort_unless($ok, 422);
+        if (!empty($data['company_id'])) {
+            $ok = \App\Models\Company::where('id', $data['company_id'])->where('tenant_id', $tenant->id)->exists();
+            abort_unless($ok, 422);
+        }
+
+        if (!empty($data['primary_contact_id'])) {
+            $ok = \App\Models\Contact::where('id', $data['primary_contact_id'])->where('tenant_id', $tenant->id)->exists();
+            abort_unless($ok, 422);
+        }
+
+        $deal->update([
+            'title' => $data['title'],
+            'amount' => $data['amount'] ?? 0,
+            'stage_id' => $data['stage_id'],
+            'expected_close_date' => $data['expected_close_date'] ?? null,
+
+            'company_id' => $data['company_id'] ?? null,
+            'primary_contact_id' => $data['primary_contact_id'] ?? null,
+        ]);
+
+        return redirect()
+            ->to(tenant_route('tenant.deals.index', ['tenant' => $tenant->subdomain]))
+            ->with('success', 'Deal updated.');
     }
-
-    if (!empty($data['primary_contact_id'])) {
-        $ok = \App\Models\Contact::where('id', $data['primary_contact_id'])->where('tenant_id', $tenant->id)->exists();
-        abort_unless($ok, 422);
-    }
-
-    $deal->update([
-        'title' => $data['title'],
-        'amount' => $data['amount'] ?? 0,
-        'stage_id' => $data['stage_id'],
-        'expected_close_date' => $data['expected_close_date'] ?? null,
-
-        'company_id' => $data['company_id'] ?? null,
-        'primary_contact_id' => $data['primary_contact_id'] ?? null,
-    ]);
-
-    return back()->with('success', 'Deal updated.');
-}
 
 
     // ✅ IMPORTANT: tenant param first

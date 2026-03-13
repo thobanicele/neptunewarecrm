@@ -1,6 +1,12 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $paymentTermOptions = ($paymentTerms ?? collect())
+            ->mapWithKeys(fn($pt) => [$pt->id => $pt->name . ' (' . $pt->days . ' days)'])
+            ->all();
+    @endphp
+
     <div class="container-fluid px-2 px-md-3" style="max-width:1200px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -40,7 +46,6 @@
                 resize: vertical;
             }
 
-            /* Select2 styling: remove dark border on dropdown search input */
             .select2-container--default .select2-selection--single {
                 border-color: #ced4da !important;
                 box-shadow: none !important;
@@ -78,7 +83,6 @@
                 <form method="POST" action="{{ tenant_route('tenant.companies.store') }}">
                     @csrf
 
-                    {{-- Company details --}}
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
                             <label class="form-label">Company Name <span class="text-danger">*</span></label>
@@ -106,10 +110,9 @@
                             <input class="form-control" name="phone" value="{{ old('phone') }}">
                         </div>
 
-                        {{-- Payment Terms (managed in Settings only) --}}
                         <div class="col-12 col-md-6">
-                            <x-select2 name="payment_term_id" label="Payment Terms" resource="payment_terms"
-                                placeholder="Select payment terms" :allowClear="true" :minInput="0" />
+                            <x-select2 name="payment_term_id" label="Payment Terms" :options="$paymentTermOptions" :value="old('payment_term_id')"
+                                placeholder="Select payment terms" :allowClear="true" />
                             <div class="form-text">
                                 Manage payment terms in
                                 <a href="{{ tenant_route('tenant.settings.payment_terms.index') }}">Settings</a>.
@@ -140,7 +143,6 @@
 
                     <hr class="my-4">
 
-                    {{-- Addresses --}}
                     <div class="row g-4">
                         <div class="col-12">
                             <div>
@@ -149,7 +151,6 @@
                             </div>
                         </div>
 
-                        {{-- Billing --}}
                         <div class="col-12 col-lg-6">
                             <div class="border rounded-3 p-3 p-md-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -171,7 +172,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Country --}}
                                 <div class="d-flex align-items-center gap-3 addr-field">
                                     <div class="addr-label-col">
                                         <label class="form-label mb-0">Country/Region</label>
@@ -219,7 +219,6 @@
                                     </div>
                                 </div>
 
-                                {{-- State --}}
                                 <div class="d-flex align-items-start gap-3 addr-field">
                                     <div class="addr-label-col pt-1">
                                         <label class="form-label mb-0">State</label>
@@ -238,7 +237,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Phone --}}
                                 <div class="d-flex align-items-center gap-3 addr-field mb-0">
                                     <div class="addr-label-col">
                                         <label class="form-label mb-0">Phone</label>
@@ -251,7 +249,6 @@
                             </div>
                         </div>
 
-                        {{-- Shipping --}}
                         <div class="col-12 col-lg-6">
                             <div class="border rounded-3 p-3 p-md-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -280,7 +277,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Country --}}
                                 <div class="d-flex align-items-center gap-3 addr-field">
                                     <div class="addr-label-col">
                                         <label class="form-label mb-0">Country/Region</label>
@@ -329,7 +325,6 @@
                                     </div>
                                 </div>
 
-                                {{-- State --}}
                                 <div class="d-flex align-items-start gap-3 addr-field">
                                     <div class="addr-label-col pt-1">
                                         <label class="form-label mb-0">State</label>
@@ -348,7 +343,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Phone --}}
                                 <div class="d-flex align-items-center gap-3 addr-field mb-0">
                                     <div class="addr-label-col">
                                         <label class="form-label mb-0">Phone</label>
@@ -379,14 +373,10 @@
 @push('scripts')
     <script>
         (function() {
-            // Init global select2 (AJAX + static) once DOM ready
             document.addEventListener('DOMContentLoaded', function() {
                 if (window.initSelect2) window.initSelect2(document);
             });
 
-            // -----------------------------
-            // Subdivisions (dynamic + Select2-safe)
-            // -----------------------------
             const SUBDIV_URL_TEMPLATE = @json(tenant_route('tenant.geo.subdivisions', ['countryIso2' => '__ISO2__']));
 
             function subdivUrl(iso2) {
@@ -433,7 +423,6 @@
                 const txt = document.querySelector(`.js-subdivision-text[data-target="${target}"]`);
                 if (!sel || !txt) return;
 
-                // Always destroy select2 before rebuilding options
                 destroySelect2(sel);
 
                 txt.value = '';
@@ -469,7 +458,6 @@
             }
 
             document.addEventListener('DOMContentLoaded', function() {
-                // Bind country change (works with Select2)
                 if (window.jQuery) {
                     window.jQuery(document).on('change', '.js-country', async function() {
                         const target = this.getAttribute('data-target');
@@ -492,20 +480,19 @@
                     });
                 }
 
-                bootOne('billing',
+                bootOne(
+                    'billing',
                     document.querySelector('.js-country[data-target="billing"]')?.value || 'ZA',
                     @json(old('billing.subdivision_id'))
                 );
 
-                bootOne('shipping',
+                bootOne(
+                    'shipping',
                     document.querySelector('.js-country[data-target="shipping"]')?.value || 'ZA',
                     @json(old('shipping.subdivision_id'))
                 );
             });
 
-            // -----------------------------
-            // Copy billing -> shipping
-            // -----------------------------
             const copyBtn = document.getElementById('copyBillingBtn');
 
             function setVal(name, val) {

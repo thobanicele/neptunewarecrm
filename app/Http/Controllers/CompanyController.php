@@ -77,10 +77,12 @@ class CompanyController extends Controller
         $contacts  = Contact::where('tenant_id', $tenant->id)->orderBy('name')->get();
         $users     = User::where('tenant_id', $tenant->id)->orderBy('name')->get();
         $taxTypes  = TaxType::where('tenant_id', $tenant->id)->orderBy('name')->get();
-        $paymentTerms = PaymentTerm::forTenant($tenant->id)
-                    ->where('is_active', 1)
-                    ->orderBy('sort_order')->orderBy('name')
-                    ->get();
+        $paymentTerms = \App\Models\PaymentTerm::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'days']);
 
         $prefillCompanyId = request()->integer('company_id') ?: null;
 
@@ -230,10 +232,12 @@ class CompanyController extends Controller
             ->orderByDesc('is_default_shipping')
             ->orderByDesc('id')
             ->first();
-        $paymentTerms = PaymentTerm::forTenant($tenant->id)
-                    ->where('is_active', 1)
-                    ->orderBy('sort_order')->orderBy('name')
-                    ->get();
+        $paymentTerms = \App\Models\PaymentTerm::query()
+                    ->where('tenant_id', $tenant->id)
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'days']);
 
         return view('tenant.companies.edit', compact('tenant', 'company', 'countries', 'billing', 'shipping', 'paymentTerms'));
     }

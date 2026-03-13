@@ -3,7 +3,6 @@
 use App\Models\Tenant;
 use App\Support\TenantPlan;
 use Illuminate\Contracts\Routing\UrlRoutable;
-use Illuminate\Support\Facades\Route;
 
 if (! function_exists('tenant')) {
     function tenant(): ?Tenant
@@ -13,55 +12,45 @@ if (! function_exists('tenant')) {
 }
 
 if (! function_exists('tenant_route')) {
-    function tenant_route(string $name, $params = [], bool $absolute = true): string
+    function tenant_route(string $name, array|string|int|UrlRoutable $params = [], bool $absolute = true): string
     {
-        $t = app()->bound('tenant') ? app('tenant') : null;
+        $tenant = tenant();
 
-        if (! $t) {
-            // fallback to normal route if tenant not bound
-            return route($name, is_array($params) ? $params : [], $absolute);
+        // Normalize params so model/string/int inputs still work
+        if ($params instanceof UrlRoutable || is_string($params) || is_int($params)) {
+            $params = [$params];
+        } elseif (! is_array($params)) {
+            $params = [];
         }
 
-        // If a Model/UrlRoutable is passed, infer the param name from the named route
-        if ($params instanceof UrlRoutable) {
-            $route = Route::getRoutes()->getByName($name);
-
-            if ($route) {
-                $paramNames = $route->parameterNames();       // e.g. ['tenant', 'company']
-                $paramNames = array_values(array_diff($paramNames, ['tenant']));
-                $key = $paramNames[0] ?? null;
-
-                $params = $key ? [$key => $params] : [];
-            } else {
-                $params = [];
-            }
+        if ($tenant) {
+            $params['tenant'] = $params['tenant'] ?? ($tenant->subdomain ?? $tenant->id);
+            return route($name, $params, $absolute);
         }
 
-        // If scalar is passed (like id), try infer similarly
-        if (! is_array($params)) {
-            $route = Route::getRoutes()->getByName($name);
-            if ($route) {
-                $paramNames = array_values(array_diff($route->parameterNames(), ['tenant']));
-                $key = $paramNames[0] ?? null;
-                $params = $key ? [$key => $params] : [];
-            } else {
-                $params = [];
-            }
+        // No tenant bound: do not try to generate tenant routes
+        if (str_starts_with($name, 'tenant.')) {
+            return '#';
         }
 
-        return route($name, array_merge(['tenant' => $t->subdomain], $params), $absolute);
+        return route($name, $params, $absolute);
     }
 }
 
 if (! function_exists('tenant_feature')) {
     function tenant_feature(?Tenant $tenant, string $feature, bool $default = false): bool
     {
-        if (! $tenant) return $default;
-
-        // ✅ Trial/subscription-aware
-        if ($tenant && ($tenant->plan ?? null) === 'internal_neptuneware') {
-            if (in_array($feature, ['ecommerce_module','ecommerce_inbound_api'], true)) return true;
+        if (! $tenant) {
+            return $default;
         }
+
+        // Trial/subscription-aware
+        if (($tenant->plan ?? null) === 'internal_neptuneware') {
+            if (in_array($feature, ['ecommerce_module', 'ecommerce_inbound_api'], true)) {
+                return true;
+            }
+        }
+
         return TenantPlan::feature($tenant, $feature, $default);
     }
 }
@@ -69,7 +58,9 @@ if (! function_exists('tenant_feature')) {
 if (! function_exists('tenant_limit')) {
     function tenant_limit(?Tenant $tenant, string $path, $default = null)
     {
-        if (! $tenant) return $default;
+        if (! $tenant) {
+            return $default;
+        }
 
         return TenantPlan::limit($tenant, $path, $default);
     }
@@ -78,7 +69,9 @@ if (! function_exists('tenant_limit')) {
 if (! function_exists('tenant_is_internal_allowed')) {
     function tenant_is_internal_allowed(?Tenant $tenant): bool
     {
-        if (! $tenant) return false;
+        if (! $tenant) {
+            return false;
+        }
 
         // if internal-only is OFF, allow all tenants
         if (! config('ecommerce_internal.only', true)) {
@@ -94,7 +87,6 @@ if (! function_exists('tenant_is_internal_allowed')) {
         return in_array($id, $allowed, true) || ($sub !== '' && in_array($sub, $allowed, true));
     }
 }
-
 
 
 

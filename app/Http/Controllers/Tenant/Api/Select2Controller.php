@@ -101,14 +101,14 @@ class Select2Controller extends Controller
             'where' => $where,
         ]);
         dd([
-    'resource' => $resource,
-    'tenant_id' => $tenant?->id,
-    'q' => $q,
-    'tenant_column' => $tenantCol,
-    'where' => $where,
-    'count' => (clone $query)->count(),
-    'rows' => (clone $query)->orderBy($orderBy)->limit(10)->get()->toArray(),
-]);
+            'resource' => $resource,
+            'tenant_id' => $tenant?->id,
+            'q' => $q,
+            'tenant_column' => $tenantCol,
+            'where' => $where,
+            'count' => (clone $query)->count(),
+            'rows' => (clone $query)->orderBy($orderBy)->limit(10)->get()->toArray(),
+        ]);
         $p = $query->orderBy($orderBy)
         
             ->paginate($perPage, ['*'], 'page', $page);

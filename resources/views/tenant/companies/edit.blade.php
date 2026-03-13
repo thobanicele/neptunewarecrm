@@ -1,6 +1,12 @@
 @extends('layouts.app')
 
 @section('content')
+    @php
+        $paymentTermOptions = ($paymentTerms ?? collect())
+            ->mapWithKeys(fn($pt) => [$pt->id => $pt->name . ' (' . $pt->days . ' days)'])
+            ->all();
+    @endphp
+
     <div class="container-fluid px-2 px-md-3" style="max-width:1200px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -39,6 +45,37 @@
             textarea.form-control {
                 resize: vertical;
             }
+
+            .select2-container--default .select2-selection--single {
+                border-color: #ced4da !important;
+                box-shadow: none !important;
+                min-height: calc(2.25rem + 2px);
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                line-height: calc(2.25rem);
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: calc(2.25rem + 2px);
+            }
+
+            .select2-container--default .select2-search--dropdown .select2-search__field {
+                border: 1px solid #ced4da !important;
+                border-radius: .375rem;
+                box-shadow: none !important;
+                outline: none !important;
+            }
+
+            .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+                border-color: #86b7fe !important;
+                box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25) !important;
+            }
+
+            .select2-container--default.select2-container--focus .select2-selection--single {
+                border-color: #86b7fe !important;
+                box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .25) !important;
+            }
         </style>
 
         <div class="card">
@@ -47,7 +84,6 @@
                     @csrf
                     @method('PUT')
 
-                    {{-- Company details --}}
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
                             <label class="form-label">Company Name <span class="text-danger">*</span></label>
@@ -77,21 +113,12 @@
                             <input class="form-control" name="phone" value="{{ old('phone', $company->phone) }}">
                         </div>
 
-                        {{-- ✅ Payment terms dropdown (managed via Settings) --}}
                         <div class="col-12 col-md-6">
-                            <label class="form-label">Payment Terms</label>
-                            <select class="form-select js-select2" name="payment_term_id"
-                                data-placeholder="Select payment terms" data-allow-clear="1">
-                                <option value=""></option>
-                                @foreach ($paymentTerms ?? collect() as $t)
-                                    <option value="{{ $t->id }}" @selected((string) old('payment_term_id', $company->payment_term_id) === (string) $t->id)>
-                                        {{ $t->name }} ({{ (int) $t->days }} days)
-                                    </option>
-                                @endforeach
-                            </select>
+                            <x-select2 name="payment_term_id" label="Payment Terms" :options="$paymentTermOptions" :value="old('payment_term_id', $company->payment_term_id)"
+                                placeholder="Select payment terms" :allowClear="true" />
                             <div class="form-text">
-                                Manage terms in <a
-                                    href="{{ tenant_route('tenant.settings.payment_terms.index') }}">Settings → Payment
+                                Manage terms in
+                                <a href="{{ tenant_route('tenant.settings.payment_terms.index') }}">Settings → Payment
                                     Terms</a>.
                             </div>
                         </div>
@@ -120,7 +147,6 @@
 
                     <hr class="my-4">
 
-                    {{-- Addresses --}}
                     <div class="row g-4">
                         <div class="col-12">
                             <div>
@@ -129,7 +155,6 @@
                             </div>
                         </div>
 
-                        {{-- Billing --}}
                         <div class="col-12 col-lg-6">
                             <div class="border rounded-3 p-3 p-md-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -149,7 +174,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Country --}}
                                 <div class="d-flex align-items-center gap-3 addr-field">
                                     <div class="addr-label-col"><label class="form-label mb-0">Country/Region</label></div>
                                     <div class="flex-grow-1">
@@ -189,7 +213,6 @@
                                     </div>
                                 </div>
 
-                                {{-- State --}}
                                 <div class="d-flex align-items-start gap-3 addr-field">
                                     <div class="addr-label-col pt-1"><label class="form-label mb-0">State</label></div>
                                     <div class="flex-grow-1">
@@ -217,7 +240,6 @@
                             </div>
                         </div>
 
-                        {{-- Shipping --}}
                         <div class="col-12 col-lg-6">
                             <div class="border rounded-3 p-3 p-md-4 h-100">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -237,7 +259,6 @@
                                     </div>
                                 </div>
 
-                                {{-- Country --}}
                                 <div class="d-flex align-items-center gap-3 addr-field">
                                     <div class="addr-label-col"><label class="form-label mb-0">Country/Region</label>
                                     </div>
@@ -279,7 +300,6 @@
                                     </div>
                                 </div>
 
-                                {{-- State --}}
                                 <div class="d-flex align-items-start gap-3 addr-field">
                                     <div class="addr-label-col pt-1"><label class="form-label mb-0">State</label></div>
                                     <div class="flex-grow-1">
@@ -325,7 +345,6 @@
 @push('scripts')
     <script>
         (function() {
-            // Init Select2 on this page (same as create)
             document.addEventListener('DOMContentLoaded', function() {
                 if (window.initSelect2) window.initSelect2(document);
                 else if (window.jQuery) window.jQuery('.js-select2').select2({
@@ -350,12 +369,38 @@
                 return await res.json();
             }
 
+            function destroySelect2(el) {
+                if (!window.jQuery) return;
+                const $el = window.jQuery(el);
+                if ($el.data('select2')) {
+                    try {
+                        $el.select2('destroy');
+                    } catch (e) {}
+                }
+            }
+
+            function initSelect2On(el) {
+                if (el.classList.contains('d-none')) return;
+                if (!window.jQuery || !window.jQuery.fn.select2) return;
+
+                const $el = window.jQuery(el);
+                if ($el.data('select2')) return;
+
+                $el.select2({
+                    width: '100%',
+                    placeholder: el.getAttribute('data-placeholder') || '',
+                    allowClear: el.getAttribute('data-allow-clear') === '1'
+                });
+            }
+
             function fillSubdivisions(target, list, selectedId) {
                 const sel = document.querySelector(`.js-subdivision[data-target="${target}"]`);
                 const txt = document.querySelector(`.js-subdivision-text[data-target="${target}"]`);
                 if (!sel || !txt) return;
 
                 const selectedText = (txt.value || '').trim();
+
+                destroySelect2(sel);
 
                 sel.innerHTML = `<option value=""></option>`;
 
@@ -372,19 +417,16 @@
                     const opt = document.createElement('option');
                     opt.value = s.id;
                     opt.textContent = s.name;
+                    if (String(s.id) === String(selectedId)) opt.selected = true;
                     sel.appendChild(opt);
                 });
 
-                if (selectedId) sel.value = String(selectedId);
+                initSelect2On(sel);
 
-                // Refresh Select2 UI if enabled
-                if (window.jQuery) {
-                    const $sel = window.jQuery(sel);
-                    if ($sel.data('select2')) $sel.trigger('change.select2');
-                    else $sel.trigger('change');
+                if (selectedId != null && window.jQuery) {
+                    window.jQuery(sel).val(String(selectedId)).trigger('change');
                 }
 
-                // If user has a text state but no id match, show text input instead
                 if (!selectedId && selectedText) {
                     sel.classList.add('d-none');
                     txt.classList.remove('d-none');
@@ -396,39 +438,40 @@
                 const iso2 = e.target.value;
                 const list = await loadSubdivisions(iso2);
 
-                // clear any selected subdivision id when country changes
                 const sel = document.querySelector(`.js-subdivision[data-target="${target}"]`);
                 if (sel) sel.value = '';
 
                 fillSubdivisions(target, list, null);
             }
 
-            // Bind country change (Select2 safe)
-            if (window.jQuery) {
-                window.jQuery(document).on('change', '.js-country', function(e) {
-                    handleCountryChange(e);
-                });
-            } else {
-                document.querySelectorAll('.js-country').forEach(el => el.addEventListener('change',
-                    handleCountryChange));
-            }
+            document.addEventListener('DOMContentLoaded', function() {
+                if (window.jQuery) {
+                    window.jQuery(document).on('change', '.js-country', function(e) {
+                        handleCountryChange(e);
+                    });
+                } else {
+                    document.querySelectorAll('.js-country').forEach(el =>
+                        el.addEventListener('change', handleCountryChange)
+                    );
+                }
+
+                bootOne(
+                    'billing',
+                    document.querySelector('.js-country[data-target="billing"]')?.value || 'ZA',
+                    @json(old('billing.subdivision_id', data_get($billing, 'subdivision_id')))
+                );
+
+                bootOne(
+                    'shipping',
+                    document.querySelector('.js-country[data-target="shipping"]')?.value || 'ZA',
+                    @json(old('shipping.subdivision_id', data_get($shipping, 'subdivision_id')))
+                );
+            });
 
             async function bootOne(target, iso2, selectedSubdivisionId) {
                 const list = await loadSubdivisions(iso2);
                 fillSubdivisions(target, list, selectedSubdivisionId);
             }
-
-            bootOne(
-                'billing',
-                document.querySelector('.js-country[data-target="billing"]')?.value || 'ZA',
-                @json(old('billing.subdivision_id', data_get($billing, 'subdivision_id')))
-            );
-
-            bootOne(
-                'shipping',
-                document.querySelector('.js-country[data-target="shipping"]')?.value || 'ZA',
-                @json(old('shipping.subdivision_id', data_get($shipping, 'subdivision_id')))
-            );
         })();
     </script>
 @endpush

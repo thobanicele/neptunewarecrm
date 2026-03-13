@@ -21,19 +21,15 @@
 
 @php
     $id = $attributes->get('id') ?? str_replace(['[', ']'], '_', $name) . '_' . uniqid();
-    $errorKey = str_replace(['[', ']'], ['.', ''], $name); // shipping[country] -> shipping.country
+    $errorKey = str_replace(['[', ']'], ['.', ''], $name);
     $hasError = $errors->has($errorKey);
     $val = old($errorKey, $value);
 
-    // If resource is provided, auto-build URLs (config pattern)
     $resolvedAjaxUrl = $ajaxUrl;
     $resolvedAjaxShowUrl = $ajaxShowUrl;
 
     if ($resource) {
-        // search endpoint
         $resolvedAjaxUrl = tenant_route('tenant.api.select2.search', ['resource' => $resource]);
-
-        // show endpoint (we keep __ID__ placeholder and JS replaces it)
         $resolvedAjaxShowUrl = tenant_route('tenant.api.select2.show', ['resource' => $resource, 'id' => '__ID__']);
     }
 @endphp
@@ -41,37 +37,40 @@
 <div class="mb-3">
     @if ($label)
         <label for="{{ $id }}" class="form-label">
-            {{ $label }} @if ($required)
+            {{ $label }}
+            @if ($required)
                 <span class="text-danger">*</span>
             @endif
         </label>
     @endif
 
-    <select id="{{ $id }}" name="{{ $name }}{{ $multiple ? '[]' : '' }}"
-        class="form-select js-select2 {{ $hasError ? 'is-invalid' : '' }}" data-placeholder="{{ $placeholder }}"
-        data-allow-clear="{{ $allowClear ? '1' : '0' }}" data-ajax-url="{{ $resolvedAjaxUrl }}"
-        data-ajax-show-url="{{ $resolvedAjaxShowUrl }}" data-min-input="{{ $minInput }}"
-        data-delay="{{ $delay }}" data-per-page="{{ $perPage }}"
-        @if ($required) required @endif @if ($multiple) multiple @endif
-        {{ $attributes->except(['id']) }}>
-        {{-- For single selects, keep a blank option so placeholder works --}}
+    <select
+        {{ $attributes->except(['id', 'class'])->merge([
+            'class' =>
+                'form-select js-select2' .
+                ($hasError ? ' is-invalid' : '') .
+                ($attributes->get('class') ? ' ' . $attributes->get('class') : ''),
+        ]) }}
+        id="{{ $id }}" name="{{ $name }}{{ $multiple ? '[]' : '' }}"
+        data-placeholder="{{ $placeholder }}" data-allow-clear="{{ $allowClear ? '1' : '0' }}"
+        data-ajax-url="{{ $resolvedAjaxUrl }}" data-ajax-show-url="{{ $resolvedAjaxShowUrl }}"
+        data-min-input="{{ $minInput }}" data-delay="{{ $delay }}" data-per-page="{{ $perPage }}"
+        @if ($required) required @endif @if ($multiple) multiple @endif>
         @if (!$multiple)
             <option value=""></option>
         @endif
 
-        {{-- Static options mode --}}
         @if (!$resolvedAjaxUrl)
             @foreach ($options as $optVal => $optLabel)
                 <option value="{{ $optVal }}"
                     @if ($multiple) @selected(collect($val)->map(fn($x) => (string) $x)->contains((string) $optVal))
                     @else
                         @selected((string) $val === (string) $optVal) @endif>
-                    {{ $optLabel }}</option>
+                    {{ $optLabel }}
+                </option>
             @endforeach
         @endif
 
-        {{-- AJAX mode: render selected IDs so form posts correctly.
-             JS will replace labels using ajax-show-url. --}}
         @if ($resolvedAjaxUrl && !empty($val))
             @if ($multiple)
                 @foreach ((array) $val as $v)
@@ -106,59 +105,66 @@
 
                 async function prefillSelectedFromShowUrl($el, ajaxShowUrl) {
                     const isMultiple = $el.prop('multiple');
-                    let current = $el.val();
-                    if (!current) return;
+                    const current = $el.val();
+                    if (!current || !ajaxShowUrl) return;
 
                     const ids = isMultiple ?
-                        (Array.isArray(current) ? current : [current]) : [current];
-
-                    if (!ajaxShowUrl) return;
+                        (Array.isArray(current) ? current : [current]) :
+                        [current];
 
                     const results = [];
+
                     for (const id of ids) {
                         if (!id) continue;
+
                         const url = String(ajaxShowUrl).replace('__ID__', encodeURIComponent(id));
                         const item = await fetchJson(url);
-                        if (item && item.id != null) results.push(item);
+
+                        if (item && item.id != null) {
+                            results.push(item);
+                        }
                     }
 
                     if (!results.length) return;
 
                     results.forEach(item => {
                         const id = String(item.id);
+                        let found = null;
 
-                        let opt = null;
                         $el.find('option').each(function() {
                             if (String(this.value) === id) {
-                                opt = this;
+                                found = this;
                                 return false;
                             }
                         });
 
-                        if (!opt) {
+                        if (!found) {
                             $el.append(new Option(item.text, item.id, true, true));
                         } else {
-                            opt.text = item.text;
-                            opt.selected = true;
+                            found.text = item.text;
+                            found.selected = true;
                         }
                     });
                 }
 
-                function initSelect2(el) {
-                    if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) {
-                        return;
-                    }
+                function initOne(el) {
+                    if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) return;
 
                     const $el = window.jQuery(el);
-                    if ($el.data('select2')) return;
 
-                    const placeholder = $el.data('placeholder') || 'Select...';
-                    const allowClear = String($el.data('allow-clear')) === '1';
-                    const ajaxUrl = $el.data('ajax-url') || null;
-                    const ajaxShowUrl = $el.data('ajax-show-url') || null;
-                    const minInput = parseInt($el.data('min-input') || '2', 10);
-                    const delay = parseInt($el.data('delay') || '250', 10);
-                    const perPage = parseInt($el.data('per-page') || '10', 10);
+                    const placeholder = $el.attr('data-placeholder') || 'Select...';
+                    const allowClear = String($el.attr('data-allow-clear')) === '1';
+                    const ajaxUrl = $el.attr('data-ajax-url') || '';
+                    const ajaxShowUrl = $el.attr('data-ajax-show-url') || '';
+                    const minInput = parseInt($el.attr('data-min-input') || '2', 10);
+                    const delay = parseInt($el.attr('data-delay') || '250', 10);
+                    const perPage = parseInt($el.attr('data-per-page') || '10', 10);
+
+                    if ($el.data('select2')) {
+                        try {
+                            $el.select2('destroy');
+                        } catch (e) {}
+                    }
 
                     const config = {
                         width: '100%',
@@ -166,7 +172,7 @@
                         allowClear
                     };
 
-                    if (ajaxUrl) {
+                    if (ajaxUrl !== '') {
                         config.ajax = {
                             url: ajaxUrl,
                             dataType: 'json',
@@ -183,7 +189,10 @@
 
                                 if (Array.isArray(data)) {
                                     return {
-                                        results: data
+                                        results: data,
+                                        pagination: {
+                                            more: false
+                                        }
                                     };
                                 }
 
@@ -196,19 +205,26 @@
                             },
                             cache: true
                         };
+
                         config.minimumInputLength = minInput;
                     }
 
                     $el.select2(config);
 
-                    if (ajaxUrl && ajaxShowUrl && $el.val()) {
+                    if (ajaxUrl !== '' && ajaxShowUrl !== '' && $el.val()) {
                         prefillSelectedFromShowUrl($el, ajaxShowUrl)
                             .finally(() => $el.trigger('change'));
                     }
                 }
 
+                function collectTargets(container) {
+                    if (!container) return [];
+                    if (container.matches && container.matches('.js-select2')) return [container];
+                    return Array.from(container.querySelectorAll('.js-select2'));
+                }
+
                 function boot(container) {
-                    (container || document).querySelectorAll('.js-select2').forEach(el => initSelect2(el));
+                    collectTargets(container || document).forEach(initOne);
                 }
 
                 document.addEventListener('DOMContentLoaded', function() {
