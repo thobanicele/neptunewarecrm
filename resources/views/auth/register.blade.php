@@ -11,7 +11,7 @@
                 <div class="text-center mt-4">
                     <a href="{{ url('/') }}" class="d-inline-flex align-items-center justify-content-center mb-3">
                         <img src="{{ asset('asset/img/Raster_1024x1024_Transparent.png') }}"
-                            alt="{{ config('app.name', 'NeptuneWare CRM') }}" style="height:42px;width:auto">
+                            alt="{{ config('app.name', 'NeptuneWare CRM') }}" style="height:82px;width:auto">
                     </a>
 
                     <h1 class="h2 mb-1">Create your account</h1>
