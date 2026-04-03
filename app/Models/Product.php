@@ -4,27 +4,28 @@ namespace App\Models;
 
 use App\Models\{QuoteItem, InvoiceItem, SalesOrderItem, CreditNoteItem};
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Product extends Model
 {
     protected $fillable = [
-    'tenant_id',
-    'brand_id',
-    'category_id',
-    'sku',
-    'name',
-    'slug',
-    'description',
-    'image_path',
-    'unit_rate',
-    'unit',
-    'is_active',
-    'is_featured',
-    'is_storefront_visible',
-    'currency',
-    'tax_type_id',
-];
+        'tenant_id',
+        'brand_id',
+        'category_id',
+        'sku',
+        'name',
+        'slug',
+        'description',
+        'image_path',
+        'unit_rate',
+        'unit',
+        'is_active',
+        'is_featured',
+        'is_storefront_visible',
+        'currency',
+        'tax_type_id',
+    ];
 
     protected $appends = [
         'image_url',
@@ -85,7 +86,7 @@ class Product extends Model
             return null;
         }
 
-        return asset('storage/' . ltrim($this->image_path, '/'));
+        return Storage::disk('public')->url($this->image_path);
     }
 
     public function isUsedInTransactions(): bool

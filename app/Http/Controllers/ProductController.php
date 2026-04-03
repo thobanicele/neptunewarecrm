@@ -24,11 +24,25 @@ class ProductController extends Controller
 
         $status = $request->query('status', '');
         $unit = $request->query('unit', '');
+        $storefront = $request->query('storefront', '');
+        $featured = $request->query('featured', '');
 
         $sort = (string) $request->query('sort', 'name');
-        $dir = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+        $dir  = strtolower((string) $request->query('dir', 'asc')) === 'desc' ? 'desc' : 'asc';
 
-        $allowedSorts = ['sku', 'name', 'slug', 'unit_rate', 'unit', 'is_active', 'is_featured', 'updated_at', 'created_at'];
+        $allowedSorts = [
+            'sku',
+            'name',
+            'slug',
+            'unit_rate',
+            'unit',
+            'is_active',
+            'is_storefront_visible',
+            'is_featured',
+            'updated_at',
+            'created_at',
+        ];
+
         if (! in_array($sort, $allowedSorts, true)) {
             $sort = 'name';
         }
@@ -52,6 +66,22 @@ class ProductController extends Controller
                 }
             })
             ->when($unit !== '', fn ($qry) => $qry->where('unit', $unit))
+            ->when($storefront !== '', function ($qry) use ($storefront) {
+                if ($storefront === 'visible') {
+                    $qry->where('is_storefront_visible', 1);
+                }
+                if ($storefront === 'hidden') {
+                    $qry->where('is_storefront_visible', 0);
+                }
+            })
+            ->when($featured !== '', function ($qry) use ($featured) {
+                if ($featured === 'yes') {
+                    $qry->where('is_featured', 1);
+                }
+                if ($featured === 'no') {
+                    $qry->where('is_featured', 0);
+                }
+            })
             ->orderBy($sort, $dir)
             ->orderByDesc('id');
 
@@ -76,6 +106,8 @@ class ProductController extends Controller
             'q',
             'status',
             'unit',
+            'storefront',
+            'featured',
             'sort',
             'dir',
             'canExport'
