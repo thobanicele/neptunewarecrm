@@ -9,21 +9,22 @@ use Illuminate\Support\Str;
 class Product extends Model
 {
     protected $fillable = [
-        'tenant_id',
-        'brand_id',
-        'category_id',
-        'sku',
-        'name',
-        'slug',
-        'description',
-        'image_path',
-        'unit_rate',
-        'unit',
-        'is_active',
-        'is_featured',
-        'currency',
-        'tax_type_id',
-    ];
+    'tenant_id',
+    'brand_id',
+    'category_id',
+    'sku',
+    'name',
+    'slug',
+    'description',
+    'image_path',
+    'unit_rate',
+    'unit',
+    'is_active',
+    'is_featured',
+    'is_storefront_visible',
+    'currency',
+    'tax_type_id',
+];
 
     protected $appends = [
         'image_url',
@@ -33,6 +34,7 @@ class Product extends Model
         'unit_rate' => 'decimal:2',
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
+        'is_storefront_visible' => 'boolean',
     ];
 
     protected static function booted(): void

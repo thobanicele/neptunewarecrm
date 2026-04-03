@@ -186,6 +186,13 @@
                                 <label class="form-check-label" for="is_featured">Featured Product</label>
                             </div>
                         </div>
+                        <div class="col-12 col-lg-4 d-flex align-items-center">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" name="is_storefront_visible"
+                                    id="is_storefront_visible" @checked(old('is_storefront_visible', false))>
+                                <label class="form-check-label" for="is_storefront_visible">Show on Storefront</label>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="d-flex gap-2 mt-4">

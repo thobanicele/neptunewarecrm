@@ -132,6 +132,7 @@ class ProductController extends Controller
                 'max:190',
                 Rule::unique('products', 'slug')->where(fn ($q) => $q->where('tenant_id', $tenant->id)),
             ],
+            'is_storefront_visible' => $request->boolean('is_storefront_visible'),
             'brand_id' => ['nullable', 'integer'],
             'category_id' => ['nullable', 'integer'],
             'description' => ['nullable', 'string', 'max:255'],
@@ -295,6 +296,7 @@ class ProductController extends Controller
                     ->where(fn ($q) => $q->where('tenant_id', $tenant->id))
                     ->ignore($product->id),
             ],
+            'is_storefront_visible' => ['nullable'],
             'brand_id' => ['nullable', 'integer'],
             'category_id' => ['nullable', 'integer'],
             'description' => ['nullable', 'string', 'max:255'],
@@ -324,6 +326,7 @@ class ProductController extends Controller
             : $product->slug;
 
         $updateData = [
+            'is_storefront_visible' => $request->boolean('is_storefront_visible'),
             'brand_id' => $data['brand_id'] ?? null,
             'category_id' => $data['category_id'] ?? null,
             'sku' => strtoupper(trim($data['sku'])),

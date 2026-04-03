@@ -38,6 +38,7 @@ class StorefrontCategoryController extends Controller
             ->where('tenant_id', $tenantModel->id)
             ->where('slug', $slug)
             ->where('is_active', true)
+            ->where('is_storefront_visible', true)
             ->firstOrFail();
 
         $sort = (string) $request->input('sort', 'latest');

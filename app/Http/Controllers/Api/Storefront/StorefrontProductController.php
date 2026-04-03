@@ -18,7 +18,8 @@ class StorefrontProductController extends Controller
         $query = Product::query()
             ->with(['brand', 'category'])
             ->where('tenant_id', $tenantModel->id)
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->where('is_storefront_visible', true);
 
         if ($request->boolean('featured')) {
             $query->where('is_featured', true);
@@ -90,6 +91,7 @@ class StorefrontProductController extends Controller
             ->with(['brand', 'category'])
             ->where('tenant_id', $tenantModel->id)
             ->where('is_active', true)
+            ->where('is_storefront_visible', true)
             ->where('slug', $slug)
             ->firstOrFail();
 
