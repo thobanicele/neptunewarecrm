@@ -3,7 +3,7 @@
 
         <a class="navbar-brand d-flex align-items-center py-0" href="{{ url('/') }}">
             <img src="{{ asset('asset/img/Raster_1024x1024_Transparent.png') }}" alt="NeptuneWare"
-                style="height:34px;width:auto;display:block;">
+                style="height:52px;width:auto;display:block;">
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
