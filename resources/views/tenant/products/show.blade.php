@@ -31,8 +31,9 @@
         @endif
 
         @php
-            // ✅ Tax Type label (relies on Product::taxType() relationship)
             $taxType = $product->taxType ?? null;
+            $brand = $product->brand ?? null;
+            $category = $product->category ?? null;
 
             $taxLabel = '—';
             if ($taxType) {
@@ -49,6 +50,16 @@
                     <div class="card-header fw-semibold">Product Details</div>
                     <div class="card-body">
                         <div class="row g-3">
+                            @if ($product->image_url)
+                                <div class="col-12">
+                                    <div class="text-muted small mb-2">Product Image</div>
+                                    <div class="border rounded p-3 bg-light">
+                                        <img src="{{ $product->image_url }}" alt="{{ $product->name }}"
+                                            class="img-fluid rounded" style="max-height: 280px; object-fit: contain;">
+                                    </div>
+                                </div>
+                            @endif
+
                             <div class="col-12 col-md-4">
                                 <div class="text-muted small">SKU</div>
                                 <div class="fw-semibold">{{ $product->sku }}</div>
@@ -57,6 +68,18 @@
                             <div class="col-12 col-md-8">
                                 <div class="text-muted small">Name</div>
                                 <div class="fw-semibold">{{ $product->name }}</div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <div class="text-muted small">Slug</div>
+                                <div class="fw-semibold">
+                                    <code>{{ $product->slug ?: '—' }}</code>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <div class="text-muted small">Storefront Image Path</div>
+                                <div class="fw-semibold">{{ $product->image_path ?: '—' }}</div>
                             </div>
 
                             <div class="col-12">
@@ -79,7 +102,16 @@
                                 <div class="fw-semibold">{{ $product->currency ?: '—' }}</div>
                             </div>
 
-                            {{-- ✅ Tax Type (from TaxType table) --}}
+                            <div class="col-12 col-md-4">
+                                <div class="text-muted small">Brand</div>
+                                <div class="fw-semibold">{{ $brand?->name ?: '—' }}</div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <div class="text-muted small">Category</div>
+                                <div class="fw-semibold">{{ $category?->name ?: '—' }}</div>
+                            </div>
+
                             <div class="col-12 col-md-4">
                                 <div class="text-muted small">Tax Type</div>
                                 <div class="fw-semibold">{{ $taxLabel }}</div>
@@ -99,6 +131,29 @@
                             </div>
 
                             <div class="col-12 col-md-4">
+                                <div class="text-muted small">Storefront</div>
+                                @if ($product->is_storefront_visible)
+                                    <span class="badge bg-dark-subtle text-dark">Visible on Storefront</span>
+                                @else
+                                    <span class="badge bg-light text-muted border">Hidden from Storefront</span>
+                                @endif
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <div class="text-muted small">Featured</div>
+                                @if ($product->is_featured)
+                                    <span class="badge bg-primary-subtle text-primary">Featured</span>
+                                @else
+                                    <span class="badge bg-light text-muted border">No</span>
+                                @endif
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <div class="text-muted small">Created</div>
+                                <div class="fw-semibold">{{ $product->created_at?->format('Y-m-d H:i') }}</div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
                                 <div class="text-muted small">Last Updated</div>
                                 <div class="fw-semibold">{{ $product->updated_at?->format('Y-m-d H:i') }}</div>
                             </div>
@@ -107,7 +162,6 @@
                 </div>
             </div>
 
-            {{-- Sidebar / quick actions --}}
             <div class="col-12 col-lg-4">
                 <div class="card">
                     <div class="card-header fw-semibold">Quick Actions</div>
@@ -128,6 +182,16 @@
                         <a href="{{ tenant_route('tenant.quotes.create') }}" class="btn btn-outline-secondary">
                             Create Quote
                         </a>
+
+                        @if ($product->is_storefront_visible)
+                            <div class="alert alert-info mb-0 mt-2">
+                                This product is currently published to the storefront.
+                            </div>
+                        @else
+                            <div class="alert alert-secondary mb-0 mt-2">
+                                This product is currently hidden from the storefront.
+                            </div>
+                        @endif
 
                         <div class="text-muted small mt-2">
                             Tip: Products are snapshotted into quote items. Updating a product later won’t change old

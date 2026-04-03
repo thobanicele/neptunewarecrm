@@ -42,11 +42,10 @@
         <div class="card">
             <div class="card-body">
 
-                {{-- Filters --}}
                 <form class="row g-2 mb-3" method="GET" action="{{ tenant_route('tenant.products.index') }}">
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-3">
                         <input class="form-control" name="q" value="{{ $q ?? '' }}"
-                            placeholder="Search SKU or Name...">
+                            placeholder="Search SKU, Name or Slug...">
                     </div>
 
                     <div class="col-6 col-lg-2">
@@ -67,20 +66,40 @@
                         </select>
                     </div>
 
+                    <div class="col-6 col-lg-2">
+                        <select class="form-select" name="storefront" onchange="this.form.submit()">
+                            <option value="">All storefront</option>
+                            <option value="visible" @selected((request('storefront') ?? '') === 'visible')>Visible on Storefront</option>
+                            <option value="hidden" @selected((request('storefront') ?? '') === 'hidden')>Hidden from Storefront</option>
+                        </select>
+                    </div>
+
+                    <div class="col-6 col-lg-2">
+                        <select class="form-select" name="featured" onchange="this.form.submit()">
+                            <option value="">All featured</option>
+                            <option value="yes" @selected((request('featured') ?? '') === 'yes')>Featured</option>
+                            <option value="no" @selected((request('featured') ?? '') === 'no')>Not Featured</option>
+                        </select>
+                    </div>
+
                     <div class="col-12 col-lg-auto d-flex gap-2">
                         <button class="btn btn-outline-secondary" type="submit">Filter</button>
                         <a class="btn btn-light" href="{{ tenant_route('tenant.products.index') }}">Reset</a>
                     </div>
                 </form>
 
-                {{-- Results summary --}}
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="text-muted small">
                         Showing <b>{{ $products->firstItem() ?? 0 }}</b>–<b>{{ $products->lastItem() ?? 0 }}</b>
                         of <b>{{ $products->total() }}</b> products
                     </div>
 
-                    @if (($q ?? '') !== '' || ($status ?? '') !== '' || ($unit ?? '') !== '')
+                    @if (
+                        ($q ?? '') !== '' ||
+                            ($status ?? '') !== '' ||
+                            ($unit ?? '') !== '' ||
+                            request('storefront') !== null ||
+                            request('featured') !== null)
                         <a class="small text-decoration-none" href="{{ tenant_route('tenant.products.index') }}">
                             Clear filters
                         </a>
@@ -93,10 +112,14 @@
                             <tr>
                                 <x-index.th-sort label="SKU" key="sku" :sort="$sort" :dir="$dir" />
                                 <x-index.th-sort label="Name" key="name" :sort="$sort" :dir="$dir" />
+                                <x-index.th-sort label="Slug" key="slug" :sort="$sort" :dir="$dir" />
                                 <x-index.th-sort label="Rate" key="unit_rate" class="text-end" :sort="$sort"
                                     :dir="$dir" />
                                 <x-index.th-sort label="Unit" key="unit" :sort="$sort" :dir="$dir" />
                                 <x-index.th-sort label="Status" key="is_active" :sort="$sort" :dir="$dir" />
+                                <x-index.th-sort label="Storefront" key="is_storefront_visible" :sort="$sort"
+                                    :dir="$dir" />
+                                <x-index.th-sort label="Featured" key="is_featured" :sort="$sort" :dir="$dir" />
                                 <th class="text-end" style="width: 180px;">Actions</th>
                             </tr>
                         </thead>
@@ -112,9 +135,23 @@
                                             {{ $p->name }}
                                         </a>
 
+                                        <div class="mt-1 d-flex flex-wrap gap-1">
+                                            @if ($p->is_featured)
+                                                <span class="badge bg-primary-subtle text-primary">Featured</span>
+                                            @endif
+
+                                            @if ($p->is_storefront_visible)
+                                                <span class="badge bg-dark-subtle text-dark">Storefront</span>
+                                            @endif
+                                        </div>
+
                                         @if ($p->description)
                                             <div class="text-muted small">{{ $p->description }}</div>
                                         @endif
+                                    </td>
+
+                                    <td>
+                                        <code>{{ $p->slug ?: '—' }}</code>
                                     </td>
 
                                     <td class="text-end">R{{ number_format((float) $p->unit_rate, 2) }}</td>
@@ -125,6 +162,22 @@
                                             <span class="badge bg-success-subtle text-success">Active</span>
                                         @else
                                             <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
+                                        @endif
+                                    </td>
+
+                                    <td>
+                                        @if ($p->is_storefront_visible)
+                                            <span class="badge bg-dark-subtle text-dark">Visible</span>
+                                        @else
+                                            <span class="badge bg-light text-muted border">Hidden</span>
+                                        @endif
+                                    </td>
+
+                                    <td>
+                                        @if ($p->is_featured)
+                                            <span class="badge bg-primary-subtle text-primary">Yes</span>
+                                        @else
+                                            <span class="badge bg-light text-muted border">No</span>
                                         @endif
                                     </td>
 
@@ -172,7 +225,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="text-muted">No products found.</td>
+                                    <td colspan="9" class="text-muted">No products found.</td>
                                 </tr>
                             @endforelse
                         </tbody>
