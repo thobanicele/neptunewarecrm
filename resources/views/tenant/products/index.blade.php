@@ -110,6 +110,7 @@
                     <table class="table table-hover table-sm align-middle mb-0">
                         <thead>
                             <tr>
+                                <th style="width: 72px;">Image</th>
                                 <x-index.th-sort label="SKU" key="sku" :sort="$sort" :dir="$dir" />
                                 <x-index.th-sort label="Name" key="name" :sort="$sort" :dir="$dir" />
                                 <x-index.th-sort label="Slug" key="slug" :sort="$sort" :dir="$dir" />
@@ -127,6 +128,22 @@
                         <tbody>
                             @forelse($products as $p)
                                 <tr>
+                                    <td>
+                                        <a href="{{ tenant_route('tenant.products.show', ['product' => $p->id]) }}"
+                                            class="text-decoration-none">
+                                            @if ($p->image_url)
+                                                <img src="{{ $p->image_url }}" alt="{{ $p->name }}"
+                                                    class="rounded border bg-light"
+                                                    style="width: 48px; height: 48px; object-fit: cover;">
+                                            @else
+                                                <div class="rounded border bg-light d-flex align-items-center justify-content-center text-muted"
+                                                    style="width: 48px; height: 48px; font-size: 11px;">
+                                                    No image
+                                                </div>
+                                            @endif
+                                        </a>
+                                    </td>
+
                                     <td class="fw-semibold">{{ $p->sku }}</td>
 
                                     <td>
@@ -225,7 +242,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-muted">No products found.</td>
+                                    <td colspan="10" class="text-muted">No products found.</td>
                                 </tr>
                             @endforelse
                         </tbody>
