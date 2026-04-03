@@ -1,9 +1,10 @@
 <?php
 
 namespace App\Models;
-use App\Models\{QuoteItem, InvoiceItem, SalesOrderItem, CreditNoteItem};
 
+use App\Models\{QuoteItem, InvoiceItem, SalesOrderItem, CreditNoteItem};
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Product extends Model
 {
@@ -13,18 +14,53 @@ class Product extends Model
         'category_id',
         'sku',
         'name',
+        'slug',
         'description',
+        'image_path',
         'unit_rate',
         'unit',
         'is_active',
+        'is_featured',
         'currency',
         'tax_type_id',
+    ];
+
+    protected $appends = [
+        'image_url',
     ];
 
     protected $casts = [
         'unit_rate' => 'decimal:2',
         'is_active' => 'boolean',
+        'is_featured' => 'boolean',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (Product $product) {
+            if (! $product->tenant_id && tenant()) {
+                $product->tenant_id = tenant()->id;
+            }
+
+            if (blank($product->slug) && filled($product->name)) {
+                $base = Str::slug($product->name);
+                $slug = $base ?: Str::random(8);
+                $i = 2;
+
+                while (
+                    static::query()
+                        ->where('tenant_id', $product->tenant_id)
+                        ->where('slug', $slug)
+                        ->when($product->exists, fn ($q) => $q->where('id', '!=', $product->id))
+                        ->exists()
+                ) {
+                    $slug = $base . '-' . $i++;
+                }
+
+                $product->slug = $slug;
+            }
+        });
+    }
 
     public function taxType()
     {
@@ -39,6 +75,15 @@ class Product extends Model
     public function category()
     {
         return $this->belongsTo(\App\Models\Category::class, 'category_id');
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (! $this->image_path) {
+            return null;
+        }
+
+        return asset('storage/' . ltrim($this->image_path, '/'));
     }
 
     public function isUsedInTransactions(): bool

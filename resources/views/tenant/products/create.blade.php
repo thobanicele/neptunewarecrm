@@ -21,7 +21,7 @@
             </div>
         @endif
 
-        <form method="POST" action="{{ tenant_route('tenant.products.store') }}">
+        <form method="POST" action="{{ tenant_route('tenant.products.store') }}" enctype="multipart/form-data">
             @csrf
 
             <div class="card">
@@ -46,7 +46,27 @@
                             @enderror
                         </div>
 
-                        {{-- ✅ Brand dropdown + quick add --}}
+                        <div class="col-12 col-lg-6">
+                            <label class="form-label">Slug (optional)</label>
+                            <input class="form-control @error('slug') is-invalid @enderror" name="slug"
+                                value="{{ old('slug') }}" placeholder="Auto-generated from product name if left blank">
+                            @error('slug')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            <div class="form-text">Leave blank to generate automatically from the product name.</div>
+                        </div>
+
+                        <div class="col-12 col-lg-6">
+                            <label class="form-label">Product Image (optional)</label>
+                            <input type="file" class="form-control @error('image') is-invalid @enderror" name="image"
+                                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                            @error('image')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                            <div class="form-text">Accepted: JPG, PNG, WEBP. Max 4MB.</div>
+                        </div>
+
+                        {{-- Brand dropdown + quick add --}}
                         <div class="col-12 col-lg-4">
                             <label class="form-label">Brand (optional)</label>
                             <div class="input-group">
@@ -71,7 +91,7 @@
                             <div class="form-text">Used for ecommerce-ready product grouping.</div>
                         </div>
 
-                        {{-- ✅ Category dropdown + quick add --}}
+                        {{-- Category dropdown + quick add --}}
                         <div class="col-12 col-lg-4">
                             <label class="form-label">Category (optional)</label>
                             <div class="input-group">
@@ -132,7 +152,6 @@
                             @enderror
                         </div>
 
-                        {{-- ✅ Tax Type dropdown (optional) --}}
                         <div class="col-12 col-lg-4">
                             <label class="form-label">Tax Type (optional)</label>
                             <select class="form-select @error('tax_type_id') is-invalid @enderror" name="tax_type_id">
@@ -159,6 +178,14 @@
                                 <label class="form-check-label" for="is_active">Active</label>
                             </div>
                         </div>
+
+                        <div class="col-12 col-lg-4 d-flex align-items-center">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" name="is_featured" id="is_featured"
+                                    @checked(old('is_featured', false))>
+                                <label class="form-check-label" for="is_featured">Featured Product</label>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="d-flex gap-2 mt-4">
@@ -170,9 +197,6 @@
         </form>
     </div>
 
-    {{-- =======================
-         Quick Add Brand Modal
-         ======================= --}}
     <div class="modal fade" id="quickAddBrandModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -195,9 +219,6 @@
         </div>
     </div>
 
-    {{-- ==========================
-         Quick Add Category Modal
-         ========================== --}}
     <div class="modal fade" id="quickAddCategoryModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -255,7 +276,6 @@
                 const data = await res.json().catch(() => ({}));
 
                 if (!res.ok) {
-                    // Laravel validation: { errors: { field: ["msg"] } }
                     const first = data?.message ||
                         (data?.errors ? Object.values(data.errors).flat()[0] : null) ||
                         'Request failed.';
@@ -265,7 +285,6 @@
                 return data;
             }
 
-            // ---- Brand quick add ----
             const brandSelect = document.getElementById('brandSelect');
             const brandName = document.getElementById('brandQuickAddName');
             const brandBtn = document.getElementById('brandQuickAddSave');
@@ -285,14 +304,12 @@
                     });
                     const b = data.brand;
 
-                    // insert & select
                     const opt = document.createElement('option');
                     opt.value = b.id;
                     opt.textContent = b.name;
                     brandSelect.appendChild(opt);
                     brandSelect.value = String(b.id);
 
-                    // close + reset
                     brandName.value = '';
                     brandModal?.hide();
                 } catch (e) {
@@ -307,7 +324,6 @@
                 setTimeout(() => brandName?.focus(), 50);
             });
 
-            // ---- Category quick add ----
             const categorySelect = document.getElementById('categorySelect');
             const categoryName = document.getElementById('categoryQuickAddName');
             const categoryBtn = document.getElementById('categoryQuickAddSave');
